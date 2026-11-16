@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, CircleCheck, ClipboardList, Database, FileSpreadsheet, History, LoaderCircle, Plus, Settings2, UploadCloud } from 'lucide-react'
 import { brl, dateLabel, pct, qty } from '@/lib/format'
-import { roles, sourceNames, type AdminData, type ImportBatch, type Role, type SourceStatus } from '@/lib/model'
+import { baseNames, roles, sourceNames, type AdminData, type ImportBatch, type Role, type SourceStatus } from '@/lib/model'
 import { Card, Empty } from './indicators'
 
 const stateText:Record<string,string>={queued:'Na fila',processing:'Processando',complete:'Concluída',partial:'Concluída com avisos',failed:'Falhou',applied:'Importado',unchanged:'Já atualizado'}
@@ -21,6 +21,7 @@ export function Administration({today,onUpdated}:{today:string;onUpdated:()=>voi
 
 function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
   const [history,setHistory]=useState<ImportHistory|null>(null),[files,setFiles]=useState<File[]>([])
+  const [base,setBase]=useState('')
   const [observed,setObserved]=useState(today),[drag,setDrag]=useState(false),[sending,setSending]=useState(false)
   const [message,setMessage]=useState(''),[error,setError]=useState(''),[current,setCurrent]=useState<string|null>(null)
   const selector=useRef<HTMLInputElement>(null),updated=useRef(onUpdated)
@@ -52,8 +53,9 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     setError('');setMessage('')
     const picked=Array.from(incoming)
     const eligible=picked.filter(f=>/\.(xlsx|xls|pdf)$/i.test(f.name)&&f.size>0&&f.size<=25*1024*1024)
-    if(eligible.length!==picked.length){setError('Use apenas Excel ou o PDF de alterações, com até 25 MB por arquivo.');return}
+    if(eligible.length!==picked.length){setError('Use apenas Excel ou o PDF de contratos detalhados ou de alterações, com até 25 MB por arquivo.');return}
     if(eligible.length>25||eligible.reduce((n,f)=>n+f.size,0)>100*1024*1024){setError('Envie até 25 relatórios e 100 MB por lote.');return}
+    if(!base){setError('Selecione a base de origem do lote.');return}
     if(!observed){setError('Informe a data da extração.');return}
     setFiles(eligible)
     void send(eligible)
@@ -64,6 +66,7 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     try {
       const form=new FormData()
       form.append('observed',observed)
+      form.append('base',base)
       selection.forEach(f=>form.append('files',f))
       const r=await fetch('/api/admin/imports',{method:'POST',body:form})
       const body=await r.json()
@@ -78,11 +81,14 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
       <Card title="Importar relatórios" description="Use as exportações originais do IXC, CRM e Life Tracker.">
         <div className="import-body">
           <div className="import-actions"><label>Data da extração <input type="date" aria-label="Data da extração" value={observed}
-            max={today} min="2026-10-01" disabled={sending} onChange={e=>setObserved(e.target.value)}/></label></div>
+            max={today} min="2026-10-01" disabled={sending} onChange={e=>setObserved(e.target.value)}/></label>
+            <label>Base de origem <select value={base} onChange={e=>setBase(e.target.value)} disabled={sending}>
+              <option value="">Selecione a base</option><option value="old">{baseNames.old}</option><option value="new">{baseNames.new}</option>
+            </select></label></div>
           <input type="file" ref={selector} onChange={e=>{if(e.target.files)add(e.target.files);e.target.value=''}} multiple accept=".xlsx,.xls,.pdf" hidden/>
           <div className={'dropzone '+(drag?'drag':'')} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);add(e.dataTransfer.files)}}>
-            <UploadCloud size={27}/><strong>Arraste seus relatórios aqui</strong><span>Excel e PDF de alterações · até 25 MB por arquivo</span>
+            <UploadCloud size={27}/><strong>Arraste seus relatórios aqui</strong><span>Excel e PDF de contratos detalhados ou de alterações · até 25 MB por arquivo</span>
             <button className="secondary" onClick={()=>selector.current?.click()} disabled={sending}>
               {sending?<><LoaderCircle size={15} className="spin"/>Enviando…</>:'Selecionar arquivos'}</button>
           </div>
@@ -93,13 +99,13 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
         </div>
       </Card>
       <Card title="Última carga por fonte" description="Posições e relatórios disponíveis no painel">
-        {history?.sources.length?<div className="source-list">{history.sources.map(s=><div key={s.source}><Database size={15}/><span>{sourceNames[s.source]||s.source}</span>
+        {history?.sources.length?<div className="source-list">{history.sources.map(s=><div key={s.base_code+':'+s.source}><Database size={15}/><span>{sourceNames[s.source]||s.source} · {baseNames[s.base_code]}</span>
           <small>{dateLabel(s.observed_on)}</small></div>)}</div>:<Empty title={history?'Aguardando a primeira carga':'Consultando fontes'} icon={Database}/>}
       </Card>
     </div>
     <Card title="Histórico de importações" description="Relatórios identificados, registros aplicados e avisos">
       {history?.batches.length?<div className="import-history">{history.batches.map((b,i)=><details key={b.id} open={i===0||undefined}>
-        <summary><History size={17}/><strong>{dateLabel(b.observed_on)}</strong><span>{qty(b.files.length)} arquivos</span><span className={badge(b.status)}>{stateText[b.status]||b.status}</span></summary>
+        <summary><History size={17}/><strong>{dateLabel(b.observed_on)} · {baseNames[b.base_code]}</strong><span>{qty(b.files.length)} arquivos</span><span className={badge(b.status)}>{stateText[b.status]||b.status}</span></summary>
         {b.error&&<div className="notice error">{b.error}</div>}
         <div className="table-scroll"><table className="data-table"><thead><tr><th>Arquivo</th><th>Relatório</th><th>Lidos</th><th>Aplicados</th><th>Situação</th></tr></thead>
           <tbody>{b.files.map(f=><tr key={f.id}><td><strong>{f.name}</strong>{f.error&&<small className="error-text">{f.error}</small>}
@@ -194,20 +200,23 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
         <label>Códigos do campo Tipo doc. no relatório Vendas<input name="codes" defaultValue={strings(data.rules.sales_doc_types)} placeholder="Códigos confirmados no IXC"/></label>{saveBtn('Salvar códigos')}
       </form>
       <details className="settings-disclosure"><summary>Validar uma ativação específica</summary>
-        <form className="settings-form" onSubmit={e=>save(e,'sale_review',f=>({contract:f.get('contract'),seller:f.get('seller'),note:f.get('note'),
+        <form className="settings-form" onSubmit={e=>save(e,'sale_review',f=>({contract:f.get('contractBase')==='legacy'?f.get('contract'):String(f.get('contractBase'))+':'+String(f.get('contract')),seller:f.get('seller'),note:f.get('note'),
           items:Array.from({length:items},(_,i)=>({product:f.get('product'+i),total:Number(f.get('total'+i))}))}))}>
+          <label>Base do contrato<select name="contractBase" defaultValue="new">{Object.entries(baseNames).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></label>
           <div className="form-pair"><label>ID do contrato<input name="contract" required/></label><label>Vendedor da venda<select name="seller">{sellers}</select></label></div>
           {Array.from({length:items},(_,i)=><div key={i} className="form-pair"><label>Produto {i+1}<select name={'product'+i}>{products.map(p=><option key={p}>{p}</option>)}</select></label>
             <label>Valor do item<input name={'total'+i} type="number" min="0" step="0.01" required/></label></div>)}
           <button type="button" className="secondary" onClick={()=>setItems(n=>Math.min(n+1,10))}><Plus size={16}/>Adicionar item</button>
           <label>Referência da conferência<input name="note" minLength={4} required/></label>{saveBtn('Salvar conferência')}
         </form>
-        <form className="settings-form" onSubmit={e=>save(e,'clear_sale_review',f=>({contract:f.get('contract')}))}>
+        <form className="settings-form" onSubmit={e=>save(e,'clear_sale_review',f=>({contract:f.get('contractBase')==='legacy'?f.get('contract'):String(f.get('contractBase'))+':'+String(f.get('contract'))}))}>
+          <label>Base do contrato<select name="contractBase" defaultValue="new">{Object.entries(baseNames).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></label>
           <label>ID do contrato para remover a conferência<input name="contract" required/></label>{saveBtn('Remover conferência')}
         </form>
       </details>
       {ruleFields.map(({key,label,example})=><details key={key} className="settings-disclosure"><summary>{label}</summary>
         <form className="settings-form" onSubmit={e=>save(e,key,f=>mapValue(f.get('mapping')))}><label>{example}
+          {key!=='aliases'&&<small>Para as novas bases, use o prefixo old: ou new: antes do código.</small>}
           <textarea rows={5} name="mapping" defaultValue={mapText(data.rules[key])}/></label>
           {key==='aliases'&&<small>{data.sellers.map(s=>s.seller_key).join(' · ')}</small>}{saveBtn()}</form></details>)}
     </Card>

@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, BriefcaseBusiness, CalendarDays, ChevronDown, CircleUserRound, Filter, LayoutDashboard, LogOut, MapPinned, Menu, ReceiptText, RefreshCw, Settings2, Target, X, type LucideIcon } from 'lucide-react'
-import { earliestMonth, roles, sections, type DashboardData, type Filters, type Section } from '@/lib/model'
+import { baseNames, earliestMonth, roles, sections, type DashboardData, type Filters, type Section } from '@/lib/model'
 import { dateLabel, monthLabel } from '@/lib/format'
 import { Administration } from './admin'
 import { Records, type DetailRequest } from './records'
@@ -104,17 +104,30 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
           <label className="filter-control"><CalendarDays size={15}/><span>Competência</span>
             <select aria-label="Competência" value={filters.month} onChange={e=>choose('month',e.target.value)}>
               {monthsTo(today).map(m=><option value={m} key={m}>{monthLabel(m)}</option>)}</select></label>
+          <label className="filter-control"><span>Base</span><select aria-label="Base" value={filters.base} onChange={e=>choose('base',e.target.value)}>
+            <option value="">Consolidado</option><option value="old">{baseNames.old}</option><option value="new">{baseNames.new}</option>
+            {(filters.base==='legacy'||data.basePositions.some(p=>p.code==='legacy'))&&<option value="legacy">{baseNames.legacy}</option>}
+          </select></label>
           {showSeller&&<label className="filter-control"><span>Vendedor</span><select aria-label="Vendedor" value={filters.seller} onChange={e=>choose('seller',e.target.value)}>
             <option value="">Todos os vendedores</option>{data.options.sellers.map(s=><option key={s.seller_key} value={s.seller_key}>{s.name}</option>)}</select></label>}
           {(allowPortfolioFilters||extras>0)&&<button className={'secondary filter-toggle '+(more?'on':'')} aria-expanded={more} onClick={()=>setMore(v=>!v)}>
             <Filter size={15}/> Filtros {extras>0&&<span>{extras}</span>}</button>}
-          {(filters.seller&&showSeller||extras>0)&&<button className="clear-filter" onClick={()=>setFilters(f=>({...f,seller:current.seller_key||'',branch:'',city:'',product:''}))}><X size={15}/>Limpar filtros</button>}
+          {(filters.seller&&showSeller||!!filters.base||extras>0)&&<button className="clear-filter" onClick={()=>setFilters(f=>({...f,seller:current.seller_key||'',base:'',branch:'',city:'',product:''}))}><X size={15}/>Limpar filtros</button>}
           {loading&&<span className="filter-status" role="status">Atualizando…</span>}
           {more&&<div className="more-filters">
             {([['branch','Filial','branches'],['city','Cidade','cities'],['product','Produto','products']] as const).map(([key,label,options])=>
               <label key={key}>{label}<select value={filters[key]} onChange={e=>choose(key,e.target.value)}>
                 <option value="">Todas as opções</option>{data.options[options].map(v=><option key={v}>{v}</option>)}</select></label>)}
           </div>}
+        </div>}
+        {view!=='admin'&&!filters.base&&data.basePositions.length>0&&<div className="filter-bar" aria-label="Posição das bases">
+          {(['old','new'] as const).map(code=>{
+            const position=data.basePositions.find(p=>p.code===code)
+            return <span className="data-freshness" key={code}>{baseNames[code]} · {position
+              ? dateLabel(position.observed)+(position.contracts?'':' · contratos pendentes')
+              : 'Aguardando carga'}</span>
+          })}
+          {data.basePositions.every(p=>p.code==='legacy')&&<span className="data-freshness">Mostrando histórico sem base</span>}
         </div>}
         {error&&<div className="notice error" role="alert">{error}</div>}
         <div className={'page-sections '+(loading?'loading':'')} aria-busy={loading}>

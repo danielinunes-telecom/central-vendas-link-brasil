@@ -48,9 +48,15 @@ def first(row, *columns):
     return next((row[col] for col in columns if row.get(col) not in (None, "", 0)), None)
 
 
+def seller_directory(row):
+    return keys(row, user_key="ID USUARIO", seller_id="ID VENDEDOR", collaborator_id="ID COLABORADOR") | labels(
+        row, name="NOME"
+    )
+
+
 def customer(row):
     return keys(row, customer_key="ID") | labels(
-        row, name="RAZAO SOCIAL", trading_name="NOME FANTASIA/SOCIAL", seller="RESPONSAVEL",
+        row, name="RAZAO SOCIAL", document="CNPJ/CPF", trading_name="NOME FANTASIA/SOCIAL", seller="RESPONSAVEL",
         city="CIDADE", branch="FILIAL", address="ENDERECO", address_number="NUMERO", postal="CEP"
     ) | {"active": norm(row.get("ATIVO")) == "SIM"}
 
@@ -66,6 +72,12 @@ def contract(row):
         "client_key": ident(first(row,"ID CLIENTE","ID DO CLIENTE","CODIGO CLIENTE","CODIGO DO CLIENTE")),
         "signed_state": text(first(row,"STATUS ASSINATURA","ASSINADO")) or None,
     }
+
+
+def contract_details(row):
+    return keys(row, contract_key="ID CONTRATO", client_key="ID CLIENTE") | dates(
+        row, activated="ATIVACAO", renewal="RENOVACAO"
+    ) | amounts(row, total="VALOR TOTAL CONTRATO")
 
 
 def sale(row):
@@ -143,7 +155,9 @@ def item(row):
 
 # (name, signature columns, key, event date, load strategy, transform)
 SCHEMAS = (
+    ("seller_directory", {"ID USUARIO","NOME","ID VENDEDOR","ID COLABORADOR"}, "user_key", None, "snapshot", seller_directory),
     ("customers", {"ID","RAZAO SOCIAL","CNPJ/CPF","RESPONSAVEL","DATA CADASTRO"}, "customer_key", None, "snapshot", customer),
+    ("contract_details", {"ID CLIENTE","ID CONTRATO","ATIVACAO","RENOVACAO","VALOR TOTAL CONTRATO"}, "contract_key", None, "snapshot", contract_details),
     ("contracts", {"ID","STATUS CONTRATO","DATA ATIVACAO","PLANO DE VENDA"}, "contract_key", None, "snapshot", contract),
     ("items", {"ID CONTRATO","PRODUTO","VALOR ITEM","TIPO DE COBRANCA"}, "item_key", None, "snapshot", item),
     ("sales", {"ID","DATA DA EMISSAO","VENDEDOR","CONTRATO R","VALOR"}, "sale_key", "issued", "merge", sale),
@@ -187,6 +201,12 @@ def parse_report(name, data, observed_on):
         required_key = key_field and source not in {"band","changes","items","expenses"}
         if required_key and key is None:
             issues.append({"line": line, "message": "Identificador de origem ausente."})
+            continue
+        if source == "contract_details" and not (values["client_key"] and values["activated"] and values["total"] is not None):
+            issues.append({"line": line, "message": "Cliente, ativação ou valor total inválido ou ausente."})
+            continue
+        if source == "seller_directory" and not (values["name"] and values["collaborator_id"]):
+            issues.append({"line": line, "message": "Nome ou ID de colaborador ausente."})
             continue
         if event_field and not event and source not in {"payments","leads","negotiations","sales"}:
             issues.append({"line": line, "message": "Data do registro inválida ou ausente."})

@@ -38,7 +38,7 @@ const updates = z.discriminatedUnion('key',[
 export async function importsFor(current:Viewer) {
   return asUser(current.email,async db=>{
     const batches = (await db.query<{data:ImportBatch[]}>('select comercial.import_status() data')).rows[0].data
-    const sources = (await db.query<SourceStatus>('select * from comercial.source_status()')).rows
+    const sources = (await db.query<SourceStatus>('select * from comercial.base_source_status()')).rows
     return { batches,sources }
   })
 }
@@ -75,6 +75,10 @@ export async function submitFiles(current:Viewer,form:FormData) {
   if (files.some(f=>!extension.test(path.extname(f.name)) || f.size===0 || f.size>maxFileBytes)) {
     throw new HttpError(400,'Use arquivos .xlsx, .xls ou o PDF de alterações, com até 25 MB por arquivo.')
   }
+  const selectedBase=form.get('base')
+  if (selectedBase!=='old'&&selectedBase!=='new'&&!(demoMode()&&selectedBase==null)) {
+    throw new HttpError(400,'Selecione a Base Velha ou a Base Nova.')
+  }
   const observed=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(form.get('observed')||localDay())
   const parsed=new Date(observed+'T12:00:00Z')
   if (!Number.isFinite(parsed.valueOf()) || parsed.toISOString().slice(0,10)!==observed ||
@@ -102,8 +106,10 @@ export async function submitFiles(current:Viewer,form:FormData) {
     throw error
   }
   return asUser(current.email,async db=>{
-    const result=await db.query<{id:string}>('select comercial.submit_import($1,$2::jsonb,$3) id',
-      [observed,JSON.stringify(manifest),process.env.IMPORT_QUEUE!=='local'])
+    const params=[observed,JSON.stringify(manifest),process.env.IMPORT_QUEUE!=='local']
+    const result=selectedBase
+      ? await db.query<{id:string}>('select comercial.submit_base_import($1,$2::jsonb,$3,$4) id',[...params,selectedBase])
+      : await db.query<{id:string}>('select comercial.submit_import($1,$2::jsonb,$3) id',params)
     return result.rows[0].id
   })
 }

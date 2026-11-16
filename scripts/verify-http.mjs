@@ -32,14 +32,35 @@ async function waitForImport(cookie,id) {
   }
   throw new Error('A importação de teste não terminou.')
 }
-async function upload(cookie,file,name) {
+async function uploadReports(cookie,files,base) {
   const form=new FormData()
   form.append('observed','2026-11-13')
-  form.append('files',new Blob([file]),name)
+  if(base)form.append('base',base)
+  for(const [name,file] of files)form.append('files',new Blob([file]),name)
   const response=await get('/api/admin/imports',cookie,{method:'POST',body:form})
   const body=await response.json()
   assert.equal(response.status,202,JSON.stringify(body))
   return waitForImport(cookie,body.id)
+}
+const upload=(cookie,file,name)=>uploadReports(cookie,[[name,file]])
+function report(headers,records) {
+  const table=[headers.split('|'),...records].map((cells,i)=>{
+    const tag=i?'td':'th'
+    return '<tr>'+cells.map(cell=>'<'+tag+'>'+cell+'</'+tag+'>').join('')+'</tr>'
+  }).join('')
+  return '<html><table>'+table+'</table></html>'
+}
+function portfolioReports(company,sharedId) {
+  return [
+    ['Clientes.xls',report('ID|Razão social|CNPJ/CPF|Responsável|Data cadastro|Ativo',[
+      [811,company,'','cayo','01/11/2026','Sim'],
+      [sharedId,'Cliente nas duas bases','529.982.247-25','cayo','01/11/2026','Sim'],
+    ])],
+    ['Contratos.xls',report('ID|Cliente|ID Cliente|Status contrato|Data ativação|Plano de venda',[
+      [1005,company,811,'Ativo','01/11/2026',1],
+      [1006,'Cliente nas duas bases',sharedId,'Ativo','01/11/2026',1],
+    ])],
+  ]
 }
 try{
   let ready=false
@@ -67,6 +88,16 @@ try{
   assert.deepEqual(own.goals.map(row=>row.seller_key),['cayo'])
   const detail=await data('/api/records?month=2026-11&seller=thiago&kind=active_contract',seller)
   assert(detail.rows.length>0 && detail.rows.every(row=>row.seller_key==='cayo'))
+  const debt=await data('/api/records?month=2026-11&kind=debt&q=9000',admin)
+  assert.equal(debt.total,1)
+  assert.equal(debt.rows[0].details.title,'9000')
+  assert.equal(debt.rows[0].occurred_on,'2026-08-10')
+  const debtCsv=await get('/api/records?month=2026-11&kind=debt&q=9000&format=csv',admin)
+  assert.equal(debtCsv.status,200)
+  assert.match(await debtCsv.text(), /"ID do título";"Nº da parcela";"Cliente";"Base";"Vencimento"/)
+  const changes=await data('/api/records?month=2026-11&kind=upgrade&q=3001',admin)
+  assert.equal(changes.total,1)
+  assert.equal(changes.rows[0].details.contract,'1001')
   const clients=await data('/api/records?month=2026-11&kind=active_client',admin)
   assert.equal(clients.total,81)
   const moved=await data('/api/records?month=2026-11&kind=visit_coverage&q=Rumo',admin)
@@ -97,6 +128,34 @@ try{
   const failure=await upload(admin,'<html><table><tr><td>Desconhecido</td></tr></table></html>','Invalido.xls')
   assert.equal(failure.status,'failed')
   assert.equal((await data('/api/dashboard?month=2026-11',admin)).base.contracts.end,81)
+  const oldBatch=await uploadReports(admin,portfolioReports('Cliente da Base Velha',812),'old')
+  assert.equal(oldBatch.status,'complete',JSON.stringify(oldBatch))
+  const newBatch=await uploadReports(admin,portfolioReports('Cliente da Base Nova',813),'new')
+  assert.equal(newBatch.status,'complete',JSON.stringify(newBatch))
+  const consolidated=await data('/api/dashboard?month=2026-11',admin)
+  assert.equal(consolidated.base.contracts.end,4)
+  assert.equal(consolidated.base.clients.end,3)
+  assert.equal(consolidated.goals.length,19)
+  assert.equal(consolidated.goals.find(g=>g.seller_key==='cayo').target,12345)
+  const duplicatedIds=await data('/api/records?month=2026-11&kind=active_contract&q=1005',admin)
+  assert.deepEqual(duplicatedIds.rows.map(row=>row.base_code).sort(),['new','old'])
+  assert(duplicatedIds.rows.every(row=>row.details.contract==='1005'&&!('identity' in row.details)))
+  const oldScope=await data('/api/dashboard?month=2026-11&base=old',admin)
+  assert.equal(oldScope.base.clients.end,2)
+  assert.equal((await data('/api/dashboard?month=2026-11&base=legacy',admin)).base.contracts.end,81)
+  const oldRepeat=await uploadReports(admin,portfolioReports('Cliente da Base Velha',812),'old')
+  assert(oldRepeat.files.every(file=>file.status==='unchanged'))
+  assert.equal((await data('/api/dashboard?month=2026-11',admin)).base.contracts.end,4)
+  const lead=report('ID|Lead viável|Responsável|Data cadastro|ID Prospecção|ID Cliente',[
+    [1,'Sim','cayo','05/11/2026',1,811],
+  ])
+  const wrongBase=await uploadReports(admin,[['Leads.xls',lead]],'old')
+  assert.equal(wrongBase.status,'failed')
+  assert.match(wrongBase.files[0].error,/Base Nova/)
+  const rightBase=await uploadReports(admin,[['Leads.xls',lead]],'new')
+  assert.equal(rightBase.status,'complete')
+  const leads=await data('/api/records?month=2026-11&kind=lead_new',admin)
+  assert.deepEqual(leads.rows.map(row=>row.base_code),['new'])
   console.log('OK: filtros, autorização, meta, visitas, CSV, alteração administrativa, carga e reenvio.')
 }finally{
   if(launch.exitCode===null){

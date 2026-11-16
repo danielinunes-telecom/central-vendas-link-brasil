@@ -1,6 +1,7 @@
 'use client'
 import { useState, type ReactNode } from 'react'
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, BriefcaseBusiness, ChartNoAxesCombined, Clock3, FileSearch, MapPinCheck, RadioTower, ReceiptText, Target, type LucideIcon } from 'lucide-react'
+import { baseNames } from '@/lib/model'
 import type { DashboardData, Goal, Trend } from '@/lib/model'
 import { brl, compactBrl, dateLabel, dayLabel, pct, qty, ratio } from '@/lib/format'
 import { Chart, gridLine, labelText, palette, tooltip } from './charts'
@@ -154,7 +155,7 @@ export function BandwidthCard({data:d,inspect}:{data:DashboardData;inspect:Inspe
     {!d.state.band?<Empty title="Aguardando dados de banda" description="A primeira exportação libera a evolução e a análise de capacidade." icon={RadioTower}/>
       :mode==='trend'?<SeriesChart values={d.bandwidth.trend} label="Utilização média da capacidade" unit="percent"/>
       :opps.length?<div className="table-scroll"><table className="data-table"><thead><tr><th>Cliente / circuito</th><th>Última leitura</th><th>Pico no mês</th><th>Capacidade</th></tr></thead>
-        <tbody>{opps.map(c=><tr key={c.circuit}><td><strong>{c.label}</strong><small>{c.circuit}</small></td><td>{pct(c.last)}</td>
+        <tbody>{opps.map(c=><tr key={c.base_code+':'+c.circuit}><td><strong>{c.label}</strong><small>{c.circuit} · {baseNames[c.base_code]}</small></td><td>{pct(c.last)}</td>
           <td><span className="status-badge amber">{pct(c.peak)}</span></td><td>{qty(c.capacity)} Mbps</td></tr>)}</tbody></table></div>
       :<Empty title="Sem circuitos acima do limite" description={'Oportunidades aparecem a partir de '+pct(threshold)+' de utilização.'} icon={RadioTower}/>}
     <div className="card-foot">Limite de oportunidade de {pct(threshold)}</div>

@@ -43,6 +43,7 @@ test('admin envia arquivos e a última carga válida é preservada',async({page}
   await page.getByRole('button',{name:'Administração',exact:true}).click()
   await expect(page.getByRole('heading',{name:'Histórico de importações'})).toBeVisible()
   const file={name:'relatorio-ignorado.xls',mimeType:'application/vnd.ms-excel',buffer:Buffer.from('<html><table><tr><td>Relatório não reconhecido</td></tr></table></html>')}
+  await page.getByLabel('Base de origem').selectOption('new')
   await page.locator('input[type=file]').setInputFiles(file)
   await expect(page.getByText('Cabeçalhos não reconhecidos. Use o relatório original exportado.',{exact:true})).toBeVisible({timeout:15000})
   const approved=await page.request.get('/api/admin/imports')

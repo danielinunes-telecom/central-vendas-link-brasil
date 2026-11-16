@@ -17,7 +17,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 
 ## Implantação corporativa
 
-1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/004_administration.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
+1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/006_multiple_bases.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
 4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.
@@ -72,3 +72,34 @@ npm run test:e2e
 
 Para executar os testes de navegador, instale o Chromium do Playwright com `npx playwright install chromium`, ou defina `LB_CHROMIUM` com o caminho do executável instalado. Os testes iniciam um banco de demonstração isolado. Cada implantação precisa validar o login corporativo, a fila e o armazenamento no projeto Supabase de destino.
 
+
+### Atualização de múltiplas bases em uma instalação existente
+
+1. Deixe o PowerShell aberto e pare o importador com Ctrl+C. Em uma janela de manutenção,
+   faça backup do banco. Se a atualização anterior ainda não foi aplicada, execute
+   `db/005_contract_details.sql`. Depois execute `db/006_multiple_bases.sql` no SQL Editor
+   do Supabase. Aplique cada migration nova uma única vez, na ordem indicada.
+2. Publique a atualização web no Render por meio do GitHub. Substitua pelos arquivos da
+   mesma versão os módulos `worker/ingest.py`, `worker/readers.py`, `worker/reports.py`
+   e `worker/run.py` no Windows.
+3. Na mesma janela do PowerShell, reinicie com `.\.venv\Scripts\python.exe -m worker.run`.
+4. Envie um lote por base, com a data real da extração. Se tiver fotografias de abertura,
+   importe essas antes das posições mais recentes da mesma base.
+
+| Lote | Relatórios |
+|---|---|
+| Base Velha | Contratos, clientes, contas a receber, vendas, despesas, inadimplência, alterações e PDF de contratos detalhados |
+| Base Nova | Os mesmos relatórios, mais leads, negociações e atividades |
+
+Lotes antigos ficam em **Histórico sem base**. Enquanto não houver cargas identificadas em
+uma competência, o painel mostra os dados históricos disponíveis nessa visão. Assim que
+houver uma carga identificada, a visão consolidada usa apenas Base Velha e Base Nova.
+O histórico permanece acessível pelo filtro para evitar soma duplicada. Carregue as duas
+bases identificadas para conferir o consolidado.
+
+O painel exibe os IDs originais e a base. A carteira consolidada conta um único cliente
+quando o mesmo CPF ou CNPJ numérico válido estiver em ambas as bases. Os contratos
+continuam separados. O documento não aparece no detalhamento. O CRM cruza os IDs com
+a Base Nova. A meta é global por vendedor. O PDF detalhado fornece renovação e valor
+total complementar, sem entrar na apuração da meta ou da receita recorrente. Para
+configurar exceções por código nas novas bases, use `old:ID` e `new:ID`.

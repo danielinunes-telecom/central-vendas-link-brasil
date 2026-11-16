@@ -19,7 +19,7 @@ from .readers import ReportError
 from .reports import parse_report
 
 MAX_BYTES = 25 * 1024**2
-ORDER = ("customers","contracts","items","sales","titles","open_titles","payments",
+ORDER = ("seller_directory","customers","contracts","contract_details","items","sales","titles","open_titles","payments",
          "debts","leads","negotiations","activities","changes","expenses","band")
 
 
@@ -50,7 +50,7 @@ def mark_file(conn, file_id, state, *, source=None, read=0, applied=0, issues=()
 def handle(conn, batch_id):
     with conn.transaction():
         conn.execute("select pg_advisory_xact_lock(211687)")
-        observed, state = conn.execute("select observed_on,status from comercial.import_batches where id=%s", (batch_id,)).fetchone()
+        observed, state, base_code = conn.execute("select observed_on,status,base_code from comercial.import_batches where id=%s", (batch_id,)).fetchone()
         if state in {"complete","partial","failed"}:
             return
         files = conn.execute("""select id,name,object_key,sha256 from comercial.import_files
@@ -71,6 +71,8 @@ def handle(conn, batch_id):
                 if len(data) > MAX_BYTES or hashlib.sha256(data).hexdigest() != checksum:
                     raise ReportError("O arquivo está incompleto ou mudou desde o envio. Anexe-o novamente.")
                 report = parse_report(name,data,observed)
+                if base_code == "old" and report.source in {"leads", "negotiations", "activities"}:
+                    raise ReportError("Leads, negociações e atividades devem ser enviados na Base Nova.")
                 ready.append((report,file_id,checksum))
             except ReportError as err:
                 mark_file(conn,file_id,"failed",error=str(err))
@@ -94,7 +96,7 @@ def handle(conn, batch_id):
             for report,file_id,checksum in candidates:
                 try:
                     with conn.transaction():
-                        applied, status = apply_report(conn,report,file_id,observed,checksum)
+                        applied, status = apply_report(conn,report,file_id,observed,checksum,base_code)
                         mark_file(conn,file_id,status,source=source,read=report.count,
                                   applied=applied,issues=report.issues)
                 except (ValueError, psycopg.DataError) as err:
@@ -169,12 +171,12 @@ def poll(conn, mode):
     return True
 
 
-def cli_import(conn, paths, observed):
+def cli_import(conn, paths, observed, base_code='legacy'):
     base = Path(os.environ["IMPORT_LOCAL_PATH"])
     batch = uuid4()
     with conn.transaction():
-        conn.execute("insert into comercial.import_batches(id,submitted_by,observed_on) values(%s,%s,%s)",
-                     (batch,"local@linkbrasil.test",observed))
+        conn.execute("insert into comercial.import_batches(id,submitted_by,observed_on,base_code) values(%s,%s,%s,%s)",
+                     (batch,"local@linkbrasil.test",observed,base_code))
         for path in paths:
             data = path.read_bytes()
             key = f"{batch}/{uuid4()}{path.suffix.lower()}"
@@ -191,6 +193,7 @@ def main():
     logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--once",action="store_true")
+    parser.add_argument("--base",choices=("old","new","legacy"),default="legacy")
     parser.add_argument("--observed",type=date.fromisoformat)
     parser.add_argument("--load",nargs="+",type=Path)
     args=parser.parse_args()
@@ -199,7 +202,7 @@ def main():
         try:
             with psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,connect_timeout=10) as conn:
                 if args.load:
-                    cli_import(conn,args.load,args.observed or date.today())
+                    cli_import(conn,args.load,args.observed or date.today(),args.base)
                     return
                 while True:
                     worked = poll(conn,mode)
