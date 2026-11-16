@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: central-vendas-link-brasil
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: DASHBOARD_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVER_KEY
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: IMPORT_QUEUE
+        value: pgmq
+      - key: IMPORT_BUCKET
+        value: link-brasil-importacoes
+      - key: PGSSLMODE
+        value: require
+  - type: worker
+    name: central-vendas-importacao
+    runtime: docker
+    dockerfilePath: ./Dockerfile.worker
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVER_KEY
+        sync: false
+      - key: IMPORT_QUEUE
+        value: pgmq
+      - key: IMPORT_BUCKET
+        value: link-brasil-importacoes
+      - key: PGSSLMODE
+        value: require
+

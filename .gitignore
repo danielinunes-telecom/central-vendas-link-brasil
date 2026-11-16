@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.next-preview/
+.next-test/
+.next-http/
+.venv/
+.env
+.env.local
+.env.production
+!.env.example
+.local/
+playwright-report/
+test-results/
+__pycache__/
+*.tsbuildinfo
+
