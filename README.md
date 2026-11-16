@@ -20,7 +20,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/004_administration.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
-4. Em um repositório privado, configure os dois serviços de `render.yaml` no Render. Preencha `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY`, as conexões PostgreSQL e `APP_ORIGIN` com a origem exata do serviço web. Use SSL nas conexões ao Supabase. O serviço web e o importador têm Dockerfiles independentes.
+4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.
 5. Entre com o administrador e faça a primeira carga na seção Importações. Cadastros e saldos são posições completas. Vendas, alterações, recebimentos, atividades e despesas trazem o mês corrente e o anterior. O painel começa em novembro de 2026. Uma posição de abertura de 31/10 habilita a comparação da base para a primeira competência. Cadastros de abertura devem ser carregados antes das posições mais recentes da mesma fonte.
 
 Para cadastrar o primeiro administrador, o responsável pelo banco pode executar, com o e-mail corporativo confirmado:
@@ -29,6 +29,25 @@ Para cadastrar o primeiro administrador, o responsável pelo banco pode executar
 insert into comercial.accounts(email,name,role,seller_key)
 values ('administrador@empresa.example','Administração','admin',null);
 ```
+
+### Importador em um computador Windows
+
+Use Python 3.12. Na pasta extraída do projeto, abra o PowerShell e instale as dependências uma vez.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r worker/requirements.txt
+```
+
+Nas variáveis de ambiente do **usuário do Windows** que vai rodar o importador, configure `DATABASE_URL` com a conexão Session pooler do usuário do banco indicado no passo 2, `SUPABASE_URL` com o endereço do projeto, `SUPABASE_SERVER_KEY` com a chave de servidor e `PGSSLMODE` com `require`. Abra um novo PowerShell após salvar. Chaves e senhas ficam nas configurações do computador ou do Render.
+
+Para processar os lotes enviados pelo painel, rode este comando na pasta do projeto.
+
+```powershell
+.\.venv\Scripts\python.exe -m worker.run
+```
+
+Com a janela aberta, o importador acompanha a fila do Supabase. Se o computador estiver desligado ou o processo estiver fechado, os lotes ficam aguardando e são processados quando o importador voltar. O painel continua consultando a última carga aplicada. No plano gratuito do Render, o primeiro acesso depois de 15 minutos sem tráfego pode demorar.
 
 ## Importação e apuração
 
