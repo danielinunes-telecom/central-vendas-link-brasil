@@ -125,7 +125,11 @@ def activity(row):
 
 def negotiation(row):
     return keys(row, deal_key="ID") | labels(row, client="CLIENTE", contact="CONTATO", seller="RESPONSAVEL",
-        status="STATUS", funnel="FUNIL", stage="ESTAGIO") | dates(row, opened="DATA INICIO", won="DATA VENCEMOS", lost="DATA PERDEMOS")
+        status="STATUS", funnel="FUNIL", stage="ESTAGIO") | dates(row, opened="DATA INICIO", won="DATA VENCEMOS", lost="DATA PERDEMOS") | {
+        "type": text(first(row, "TIPO", "TIPO NEGOCIACAO", "TIPO DE NEGOCIACAO")) or None,
+        "client_key": ident(first(row, "ID CLIENTE", "ID DO CLIENTE", "CLIENTE"))
+            if (ident(first(row, "ID CLIENTE", "ID DO CLIENTE", "CLIENTE")) or "").isdigit() else None,
+    }
 
 
 def expense(row):
@@ -191,10 +195,14 @@ def parse_report(name, data, observed_on):
     ):
         source, mode = "open_titles", "snapshot"
     issues, result, counts, seen = [], [], Counter(), {}
+    if source == "negotiations" and not {"TIPO", "TIPO NEGOCIACAO", "TIPO DE NEGOCIACAO"} & set(table.headers):
+        issues.append({"line": 1, "message": "Coluna de tipo da negociação ausente. Visitas de RELACIONAMENTO aguardam esse campo."})
     for line, raw in table.rows:
         values = transform(raw)
         if source == "activities":
-            event = values["finished"] or values["end"] or values["planned"]
+            event = values["planned"]
+            if event is None and norm(values.get("subject")).startswith("VISITA"):
+                issues.append({"line": line, "message": "Data/Hora início da visita ausente. Registro fora da apuração mensal de visitas."})
         else:
             event = values.get(event_field) if event_field else None
         key = values.get(key_field) if key_field else None

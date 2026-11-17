@@ -17,7 +17,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 
 ## Implantação corporativa
 
-1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/006_multiple_bases.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
+1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/007_october_visits.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
 4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.
@@ -103,3 +103,24 @@ continuam separados. O documento não aparece no detalhamento. O CRM cruza os ID
 a Base Nova. A meta é global por vendedor. O PDF detalhado fornece renovação e valor
 total complementar, sem entrar na apuração da meta ou da receita recorrente. Para
 configurar exceções por código nas novas bases, use `old:ID` e `new:ID`.
+
+
+### Outubro e visitas — atualização 007
+
+Com as migrations 005 e 006 já aplicadas, execute apenas `db/007_october_visits.sql`
+uma vez e publique os arquivos desta atualização. Atualize `worker/reports.py` no Windows
+e reenvie Atividades e Negociações da Base Nova para reprocessar os campos novos.
+O importador usa Data/Hora início nas atividades e Data início nas negociações.
+
+Visitas são atividades com assunto começando com VISITA, incluindo VISITAS, e negociações
+com tipo RELACIONAMENTO, em qualquer status. Os IDs de clientes desses registros apontam
+para a Base Velha. A cobertura mensal deduplica por cliente e os detalhes guardam os IDs
+originais de cada tarefa ou negociação. Uma exportação de negociações sem coluna Tipo
+gera aviso e mantém essas visitas pendentes até receber o campo. Leads continuam com
+os vínculos já configurados para a Base Nova.
+
+Metas e pesos de outubro herdam os primeiros valores vigentes, preservando valores de
+outubro já configurados. Posições históricas da carteira precisam de suas fotografias.
+Datas de eventos e vínculos de clientes podem ser recuperados de uma exportação posterior,
+com a posição histórica marcada como indisponível. Visitas em status de agendamento também
+contam na cobertura de acordo com a regra aprovada.

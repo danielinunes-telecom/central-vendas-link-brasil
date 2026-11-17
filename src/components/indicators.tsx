@@ -93,7 +93,7 @@ export function VisitsCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}
         <button onClick={()=>inspect('visit_coverage','visited')}><span><i className="dot blue"/>Visitados</span><strong>{qty(c.visited)}</strong></button>
         <button onClick={()=>inspect('visit_coverage','pending')}><span><i className="dot pale"/>Pendentes</span><strong>{qty(c.pending)}</strong></button>
       </div>
-    </>:<Empty title={d.state.visits?'Sem carteira identificada':'Aguardando atividades'} description="A cobertura usa as visitas concluídas de clientes vinculados." icon={MapPinCheck}/>}
+    </>:<Empty title={d.state.visits?'Sem carteira identificada':'Aguardando atividades'} description="A cobertura considera os registros vinculados de visita e relacionamento, em todos os status." icon={MapPinCheck}/>}
     {d.state.visits&&c.active>0&&<div className="card-foot"><Clock3 size={14}/>{qty(c.active)} clientes na cobertura do mês</div>}
   </Card>
 }

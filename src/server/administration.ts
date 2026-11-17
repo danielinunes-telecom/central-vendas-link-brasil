@@ -13,7 +13,7 @@ import { HttpError } from './http'
 export const maxFileBytes = 25 * 1024 * 1024
 export const maxBatchBytes = 100 * 1024 * 1024
 const extension = /^\.(xlsx|xls|pdf)$/i
-export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/).refine(v=>v>='2026-11-01')
+export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/).refine(v=>v>='2026-10-01')
 const text = z.string().trim().min(1).max(160)
 const entry = z.object({ product:text,total:z.number().nonnegative().max(999_999_999) })
 const jsonMap = z.record(z.string().min(1).max(180),text).refine(o=>Object.keys(o).length<=10000)

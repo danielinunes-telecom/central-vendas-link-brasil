@@ -167,14 +167,14 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     <div className="content-grid equal-grid">
       <Card title="Metas por vendedor" description="As alterações valem a partir da competência selecionada.">
         <form className="settings-form" onSubmit={e=>save(e,'target',f=>({seller:f.get('seller'),month:String(f.get('month'))+'-01',amount:Number(f.get('amount'))}))}>
-          <label>Vendedor<select name="seller" required>{sellers}</select></label><div className="form-pair"><label>Competência<input type="month" name="month" min="2026-11" defaultValue={month} required/></label>
+          <label>Vendedor<select name="seller" required>{sellers}</select></label><div className="form-pair"><label>Competência<input type="month" name="month" min="2026-10" defaultValue={month} required/></label>
           <label>Meta em reais<input name="amount" type="number" min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
         </form>
       </Card>
       <Card title="Percentuais por produto" description="Pesos do produto na apuração da meta">
         <form className="settings-form" onSubmit={e=>save(e,'rate',f=>({product:f.get('product'),month:String(f.get('month'))+'-01',rate:Number(f.get('rate'))/100}))}>
           <label>Produto<select name="product">{products.map(p=><option key={p}>{p}</option>)}</select></label>
-          <div className="form-pair"><label>Competência<input type="month" name="month" min="2026-11" defaultValue={month} required/></label>
+          <div className="form-pair"><label>Competência<input type="month" name="month" min="2026-10" defaultValue={month} required/></label>
             <label>Percentual<input name="rate" type="number" min="0" max="100" step="0.01" defaultValue="25" required/></label></div>{saveBtn('Salvar percentual')}
         </form>
       </Card>

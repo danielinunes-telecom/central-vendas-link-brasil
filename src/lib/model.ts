@@ -59,7 +59,7 @@ export type AdminData = {
   changes: { setting: string; changed_by: string; changed_at: string }[]
 }
 
-export const earliestMonth = '2026-11'
+export const earliestMonth = '2026-10'
 export const roles: Record<Role, string> = { admin: 'Administrador', manager: 'Gestor', seller: 'Vendedor' }
 export const sections = [
   { key: 'overview', label: 'Visão geral' },

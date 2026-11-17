@@ -156,6 +156,36 @@ try{
   assert.equal(rightBase.status,'complete')
   const leads=await data('/api/records?month=2026-11&kind=lead_new',admin)
   assert.deepEqual(leads.rows.map(row=>row.base_code),['new'])
+  const octoberContracts=report('ID|Cliente|ID Cliente|Status contrato|Data ativação|Plano de venda',[
+    [1005,'Cliente da Base Velha',811,'Ativo','01/09/2026',1],
+    [1006,'Cliente nas duas bases',812,'Ativo','01/09/2026',1],
+  ])
+  await uploadReports(admin,[['Contratos.xls',octoberContracts]],'old')
+  const activity=report('ID|Tipo|Assunto|Responsável|Status|Data/Hora início|Data|Cliente',[
+    [777,'Atividade','VISITA AO CLIENTE','cayo','Agendada','20/10/2026','10/11/2026',811],
+    [778,'Tarefa','VISITAS','cayo','Cancelada','21/10/2026','10/11/2026',811],
+    [779,'Atividade','TELEFONEMA','cayo','Concluída','21/10/2026','10/11/2026',812],
+  ])
+  const relationships=report('ID|Funil|Estágio|Data vencemos|Contato|Cliente|Tipo|Responsável|Data início|Status',[
+    [777,'Comercial','Atendimento','','Contato',812,'RELACIONAMENTO','cayo','22/10/2026','Perdemos'],
+    [778,'Comercial','Atendimento','','Contato',811,'RELACIONAMENTO','cayo','23/10/2026','Em andamento'],
+    [779,'Comercial','Atendimento','','Contato',812,'VENDA','cayo','23/10/2026','Ganhamos'],
+  ])
+  const visitsBatch=await uploadReports(admin,[['Atividades.xls',activity],['Negociacoes.xls',relationships]],'new')
+  assert.equal(visitsBatch.status,'complete',JSON.stringify(visitsBatch))
+  const october=await data('/api/dashboard?month=2026-10&base=old',admin)
+  assert.equal(october.filters.month,'2026-10')
+  assert.equal(october.coverage.visited,2)
+  assert.equal(october.coverage.active,2)
+  assert.equal(october.goals.length,19)
+  assert.equal(october.goals.find(g=>g.seller_key==='adriano').target,10000)
+  const visitRows=await data('/api/records?month=2026-10&base=old&kind=visit_task',admin)
+  assert.equal(visitRows.total,4)
+  assert.equal(visitRows.rows.filter(row=>row.details.task==='777'||row.details.deal==='777').length,2)
+  assert(visitRows.rows.every(row=>row.base_code==='old'&&row.details.source_base==='new'))
+  assert(visitRows.rows.some(row=>row.label==='Cliente da Base Velha'&&row.details.task==='777'))
+  assert.equal((await data('/api/dashboard?month=2026-10&base=new',admin)).coverage.visited,0)
+  assert.equal((await data('/api/records?month=2026-11&base=old&kind=visit_task',admin)).total,0)
   console.log('OK: filtros, autorização, meta, visitas, CSV, alteração administrativa, carga e reenvio.')
 }finally{
   if(launch.exitCode===null){
