@@ -13,7 +13,7 @@ const amount=(m:Metric)=>m.kind==='band'?pct(m.amount):cash.has(m.kind)?brl(m.am
 function explanation(m:Metric) {
   const x=m.details
   if(m.kind==='contract_values') return [x.plan,x.seller_source,x.reason].filter(Boolean).join(' · ')
-  if(m.kind==='goal_sale') return String(x.product)+' · '+brl(Number(x.gross))+' × '+pct(Number(x.rate)*100)
+  if(m.kind==='goal_sale') return String(x.product)+' · '+brl(Number(x.gross))+' · Valor integral da venda'
   if(m.kind==='expense') return [x.category,x.vehicle,x.trip,x.pending_limit?'Diárias ou pessoas pendentes':x.excess!=null?'Excedente '+brl(Number(x.excess)):null].filter(Boolean).join(' · ')
   if(m.kind==='band') return qty(Number(x.used))+' / '+qty(Number(x.capacity))+' Mbps'
   if(m.kind==='debt') return qty(Number(x.days))+' dias em atraso'

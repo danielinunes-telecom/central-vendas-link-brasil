@@ -78,6 +78,24 @@ try{
   assert.equal(whole.goals.length,19)
   assert(whole.lines.find(row=>row.kind==='goal_sale').amount>0)
   assert.equal(whole.lines.find(row=>row.kind==='goal_sale').count,12)
+  const fullSales=await data('/api/records?month=2026-11&kind=goal_sale',admin)
+  assert(fullSales.rows.length>0)
+  for(const row of fullSales.rows){
+    assert.equal(Number(row.amount),Number(row.details.gross),'Cada venda deve contar pelo valor integral')
+    assert.equal(Number(row.details.rate),1)
+  }
+  const firstSale=fullSales.rows[0]
+  const review=await get('/api/admin/settings',admin,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    key:'sale_review',value:{contract:firstSale.details.contract,seller:firstSale.seller_key,note:'Teste de produto sem percentual cadastrado',items:[{product:'PLANO SEM MAPEAMENTO',total:3000}]},
+  })})
+  assert.equal(review.status,200,await review.text())
+  const unweighted=await data('/api/records?month=2026-11&kind=goal_sale',admin)
+  const verified=unweighted.rows.filter(row=>row.details.contract===firstSale.details.contract)
+  assert.equal(verified.length,1)
+  assert.equal(Number(verified[0].amount),3000,'Plano desconhecido deve contar R$ 3.000 integralmente')
+  const cleared=await get('/api/admin/settings',admin,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'clear_sale_review',value:{contract:firstSale.details.contract}})})
+  assert.equal(cleared.status,200)
+
   assert.equal(whole.lines.find(row=>row.kind==='reversal').count,2)
   assert.equal(whole.bandwidth.circuits.length,42)
   assert.equal(whole.coverage.active,81)

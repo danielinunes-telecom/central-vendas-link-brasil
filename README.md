@@ -17,7 +17,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 
 ## Implantação corporativa
 
-1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/008_contract_values.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
+1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/009_full_sales_value.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
 4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.
@@ -53,7 +53,7 @@ Com a janela aberta, o importador acompanha a fila do Supabase. Se o computador 
 
 - A Administração aceita o envio em lote de .xlsx, .xls, HTML com extensão .xls e do PDF de alterações do IXC. O importador reconhece cabeçalhos, guarda origem e linha, valida o lote e informa rejeições. O mesmo arquivo reenviado atualiza a data de referência sem dobrar totais.
 - O Colaborador Responsável define o dono da carteira. Cadastros com nomes duplicados ficam pendentes até existir um vínculo por ID ou uma associação conferida na Administração. Esse tratamento se aplica à contagem de clientes, ao detalhamento por vendedor e aos leads efetivados. Grafias e códigos de vendedor podem ser vinculados nas configurações.
-- As metas individuais iniciais são R$ 10.000 para Adriano, Cayo e Thiago, R$ 5.000 para Natália e R$ 7.000 para os demais. A competência é a data de ativação e o vendedor é o da venda. O painel mostra o realizado validado, o percentual atingido e os contratos pendentes. Para usar o total de um documento, confirme os códigos elegíveis e cadastre o vínculo entre plano e produto na Administração. Itens identificados por venda ou uma conferência específica permitem validar contratos com vários produtos.
+- As metas individuais iniciais são R$ 10.000 para Adriano, Cayo e Thiago, R$ 5.000 para Natália e R$ 7.000 para os demais. A competência é a data de ativação e o vendedor é o da venda. O painel mostra o realizado validado, o percentual atingido e os contratos pendentes. Todos os planos e tipos de documento finalizados contam pelo valor integral da venda, sem pesos por serviço. Itens identificados por venda ou uma conferência específica permitem validar contratos com vários produtos.
 - A receita recorrente usa itens recorrentes quando disponíveis. Para a estimativa, exige um título recorrente sem cobrança proporcional elegível por contrato e mês. A cobertura aparece no painel.
 - Uma visita à carteira é uma tarefa concluída com assunto reconhecido, vinculada ao cliente. Para transferências, o crédito da visita já feita fica com o responsável da data. Uma pendência acompanha o novo responsável se o cliente ainda não tiver sido visitado na competência. A primeira carga registra a posição conhecida e o responsável da tarefa ajuda a atribuir visitas anteriores ao histórico.
 - O Life Tracker usa o campo Nome para identificar o vendedor. Almoço e jantar usam o limite de R$ 40 por refeição. Hospedagem usa R$ 180 por pessoa e diária. Lançamentos que não trazem pessoas ou diárias entram no total e ficam pendentes para cálculo do excedente.
@@ -119,7 +119,7 @@ originais de cada tarefa ou negociação. Uma exportação de negociações sem 
 gera aviso e mantém essas visitas pendentes até receber o campo. Leads continuam com
 os vínculos já configurados para a Base Nova.
 
-Metas e pesos de outubro herdam os primeiros valores vigentes, preservando valores de
+Metas de outubro herdam os primeiros valores vigentes, preservando valores de
 outubro já configurados. Posições históricas da carteira precisam de suas fotografias.
 Datas de eventos e vínculos de clientes podem ser recuperados de uma exportação posterior,
 com a posição histórica marcada como indisponível. Visitas em status de agendamento também
@@ -143,3 +143,10 @@ continua usando os produtos e valores elegíveis da venda.
 O leitor de alterações preserva linhas como "Alteração de venc." cujos textos
 invadem a faixa horizontal da data. Os três modelos de PDF são identificados
 pelo conteúdo, independentemente do nome do arquivo.
+
+
+## Valor integral das vendas — atualização 009
+
+Execute `db/009_full_sales_value.sql` no SQL Editor do Supabase, após as migrações anteriores. O script pode ser executado novamente e recalcula os meses já importados. Todas as vendas finalizadas contam pelo valor integral, independentemente do serviço, do plano ou do tipo de documento. Não é necessário cadastrar pesos nem mapear planos para apurar a meta. As metas mensais por vendedor e a competência pela ativação permanecem.
+
+A conferência manual e os itens vinculados continuam tendo prioridade. Sem itens, uma única venda finalizada vinculada ao contrato fornece seu total; vários documentos para o mesmo contrato continuam pendentes de conferência para evitar duplicidade. O valor mensal do PDF de contratos permanece complementar e não substitui silenciosamente um valor divergente do relatório de vendas.

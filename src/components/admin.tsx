@@ -171,12 +171,8 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
           <label>Meta em reais<input name="amount" type="number" min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
         </form>
       </Card>
-      <Card title="Percentuais por produto" description="Pesos do produto na apuração da meta">
-        <form className="settings-form" onSubmit={e=>save(e,'rate',f=>({product:f.get('product'),month:String(f.get('month'))+'-01',rate:Number(f.get('rate'))/100}))}>
-          <label>Produto<select name="product">{products.map(p=><option key={p}>{p}</option>)}</select></label>
-          <div className="form-pair"><label>Competência<input type="month" name="month" min="2026-10" defaultValue={month} required/></label>
-            <label>Percentual<input name="rate" type="number" min="0" max="100" step="0.01" defaultValue="25" required/></label></div>{saveBtn('Salvar percentual')}
-        </form>
+      <Card title="Cálculo das vendas" description="Todos os serviços e planos contam pelo valor integral vendido.">
+        <p>O realizado é a soma das vendas validadas, sem aplicar percentuais por produto. As metas mensais de cada vendedor continuam configuráveis.</p>
       </Card>
     </div>
     <div className="content-grid equal-grid">
@@ -195,10 +191,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
         <label>Percentual mínimo de utilização<input name="threshold" type="number" min="1" max="100" defaultValue={Number(data.rules.band_threshold||80)} required/></label>{saveBtn()}
       </form></Card>
     </div>
-    <Card title="Validação da meta" description="Configure os tipos de documento que representam a venda elegível.">
-      <form className="settings-form" onSubmit={e=>save(e,'sales_doc_types',f=>split(f.get('codes')))}>
-        <label>Códigos do campo Tipo doc. no relatório Vendas<input name="codes" defaultValue={strings(data.rules.sales_doc_types)} placeholder="Códigos confirmados no IXC"/></label>{saveBtn('Salvar códigos')}
-      </form>
+    <Card title="Validação da meta" description="Todas as vendas finalizadas são consideradas pelo valor integral. Confira abaixo os casos com vínculo ou valor pendente.">
       <details className="settings-disclosure"><summary>Validar uma ativação específica</summary>
         <form className="settings-form" onSubmit={e=>save(e,'sale_review',f=>({contract:f.get('contractBase')==='legacy'?f.get('contract'):String(f.get('contractBase'))+':'+String(f.get('contract')),seller:f.get('seller'),note:f.get('note'),
           items:Array.from({length:items},(_,i)=>({product:f.get('product'+i),total:Number(f.get('total'+i))}))}))}>
@@ -232,7 +225,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
         <tbody>{data.accounts.map(a=><tr key={a.email}><td><strong>{a.name}</strong><small>{a.email}</small></td><td>{roles[a.role]}</td><td>{a.active?'Ativo':'Inativo'}</td></tr>)}</tbody></table></div>
     </Card>
     <div className="content-grid equal-grid">
-      <Card title="Percentuais cadastrados"><div className="simple-rows">{data.rates.filter(r=>r.effective_month<=today).filter((r,i,a)=>a.findIndex(v=>v.product===r.product)===i).map(r=><div key={r.product}><span>{r.product}</span><strong>{pct(Number(r.rate)*100)}</strong></div>)}</div></Card>
+
       <Card title="Metas cadastradas"><div className="simple-rows settings-target-list">{data.targets.filter(r=>r.effective_month<=today).filter((r,i,a)=>a.findIndex(v=>v.seller_key===r.seller_key)===i).map(r=><div key={r.seller_key}><span>{r.name}</span><strong>{brl(Number(r.amount))}</strong></div>)}</div></Card>
     </div>
   </div>
