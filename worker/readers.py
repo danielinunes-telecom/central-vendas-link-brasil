@@ -107,11 +107,16 @@ def read_alterations_pdf(document):
         for _, line in sorted(by_line.items()):
             def words(a, b):
                 return " ".join(word["text"] for word in line if a <= word["x0"] < b)
-            contract, event_date = words(15, 83), words(83, 160)
-            if re.fullmatch(r"\d+", contract) and re.fullmatch(r"\d{2}/\d{2}/\d{4}", event_date):
-                result.append((contract, event_date, words(160, 220), words(220, 266),
-                               words(266, 328), words(328, 397), words(397, 455),
-                               words(455, 565), words(565, 649)))
+            contract = words(15, 83)
+            date_word = next((word for word in line if re.fullmatch(r"\d{2}/\d{2}/\d{4}", word["text"])), None)
+            if re.fullmatch(r"\d+", contract) and date_word is not None:
+                # Some IXC layouts place "Alteração" immediately beside the date.
+                # Parse the date token itself instead of the whole horizontal band.
+                event_date = date_word["text"]
+                result.append((contract, event_date,
+                    " ".join(word["text"] for word in line if word["x0"] >= date_word["x1"] and word["x0"] < 215),
+                    words(215, 266), words(266, 328), words(328, 397),
+                    words(397, 440), words(440, 540), words(540, 640)))
     if not recognized or not window or (total is not None and len(result) != total):
         raise ReportError("Não foi possível conferir a estrutura do PDF de alterações do IXC.")
     return as_table(headers, enumerate(result, 1), window)
@@ -155,13 +160,58 @@ def read_contract_details_pdf(document):
     return as_table(header, enumerate(rows, 1))
 
 
+def read_contract_values_pdf(document):
+    header = ("ID CLIENTE", "CLIENTE", "PLANO RELATORIO", "ATIVACAO", "RENOVACAO",
+              "VALOR MENSAL RELATORIO", "VENDEDOR", "TAXA INSTALACAO")
+    rows, expected_count, expected_total = [], None, None
+    for page in document.pages:
+        lines = page.extract_text_lines(return_chars=False)
+        title = next((line for line in lines if "VLR LIQ (MENS)" in norm(line["text"])
+                      and "VENDEDOR" in norm(line["text"])), None)
+        if title is None:
+            raise ReportError("Cabeçalho do relatório de contratos com vendedor ausente.")
+        words = page.extract_words(x_tolerance=1, y_tolerance=1)
+        header_words = [word for word in words if abs(word["top"]-title["top"]) < 1]
+        anchor = lambda label: next(word["x0"] for word in header_words if norm(word["text"]) == label)
+        date_start, renewal, identifier, client = (anchor(label) for label in ("ATIVACAO", "RENOVACAO", "ID", "CLIENTE"))
+        plan, value, seller, fee, terms = (anchor(label) for label in ("PLANO", "VLR", "VENDEDOR", "TAXA", "CONDICOES"))
+        groups = defaultdict(list)
+        for word in words:
+            if word["top"] > title["bottom"]:
+                groups[round(word["top"], 1)].append(word)
+        for _, group in sorted(groups.items()):
+            text = " ".join(word["text"] for word in group)
+            footer = re.search(r"Totais:\s+Contratos:\s+([\d.]+)\s+([\d.,-]+)", text, re.I)
+            if footer:
+                expected_count = int(footer[1].replace(".", ""))
+                expected_total = decimal(footer[2])
+            get = lambda a, b: " ".join(word["text"] for word in group if a <= word["x0"] < b)
+            client_id = get(identifier-10, client-3)
+            if not client_id.isdigit():
+                continue
+            activated, renewed = get(date_start-5,renewal-3), get(renewal-3,identifier-10)
+            monthly, installation = get(value-3,seller-3), get(fee-3,terms-3)
+            if ((activated and not day(activated)) or (renewed and not day(renewed))
+                    or decimal(monthly) is None or decimal(installation) is None):
+                raise ReportError("Data ou valor inválido no relatório de contratos com vendedor.")
+            rows.append((client_id,get(client-3,plan-3),get(plan-3,value-3),
+                         activated,renewed,monthly,get(seller-3,fee-3),installation))
+    if expected_count != len(rows) or expected_total is None or sum(Decimal(decimal(row[5])) for row in rows) != Decimal(expected_total):
+        raise ReportError("Quantidade ou valor mensal difere dos totalizadores do relatório com vendedor.")
+    return as_table(header, enumerate(rows, 1))
+
+
 def read_table(filename, data):
     if PurePath(filename).suffix.lower() == ".pdf" or data.startswith(b"%PDF-"):
         with pdfplumber.open(BytesIO(data)) as document:
             if not document.pages or len(document.pages) > 150:
                 raise ReportError("O PDF deve conter entre 1 e 150 páginas.")
             first_page = norm(document.pages[0].extract_text())
+            if "VLR LIQ (MENS)" in first_page and "VENDEDOR" in first_page and "PLANO DE VENDA" in first_page:
+                return read_contract_values_pdf(document)
             if "RELATORIO DETALHADO" in first_page and "ID CLIENTE ID CONTRATO ATIVACAO RENOVACAO VALOR" in first_page:
                 return read_contract_details_pdf(document)
-            return read_alterations_pdf(document)
+            if "RELATORIO DE ALTERACOES DE CONTRATO" in first_page:
+                return read_alterations_pdf(document)
+            raise ReportError("Modelo de PDF não reconhecido. Envie o relatório de contratos detalhados, com vendedor ou de alterações do IXC.")
     return read_excel(data)

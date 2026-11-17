@@ -17,7 +17,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 
 ## Implantação corporativa
 
-1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/007_october_visits.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
+1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/008_contract_values.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
 4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.
@@ -124,3 +124,22 @@ outubro já configurados. Posições históricas da carteira precisam de suas fo
 Datas de eventos e vínculos de clientes podem ser recuperados de uma exportação posterior,
 com a posição histórica marcada como indisponível. Visitas em status de agendamento também
 contam na cobertura de acordo com a regra aprovada.
+
+
+### PDFs com vendedor — atualização 008
+
+Após a migration 007, execute `db/008_contract_values.sql` uma única vez. Atualize
+`worker/readers.py`, `worker/reports.py` e `worker/run.py` no Windows, reinicie o
+importador e reenvie os dois PDFs na Base Nova. O painel é publicado pelo GitHub/Render.
+
+O relatório "Detalhado com Instalador Responsável" traz ID do cliente, plano,
+ativação, renovação, vendedor, líquido mensal e instalação. Seu ID pertence ao
+cliente. A importação confere a quantidade de linhas e a soma dos valores com o
+rodapé. O painel mostra quantidade e líquido mensal do próprio relatório por vendedor.
+O vínculo com um contrato exige cliente, plano e ativação compatíveis e uma única
+correspondência na mesma base. Vínculos ambíguos permanecem pendentes. A meta comercial
+continua usando os produtos e valores elegíveis da venda.
+
+O leitor de alterações preserva linhas como "Alteração de venc." cujos textos
+invadem a faixa horizontal da data. Os três modelos de PDF são identificados
+pelo conteúdo, independentemente do nome do arquivo.

@@ -8,10 +8,11 @@ import { brl, dateLabel, pct, qty } from '@/lib/format'
 import { Empty } from './indicators'
 
 export type DetailRequest={kind:string;status?:'all'|'pending'|'visited'}
-const cash=new Set(['target','goal_sale','mrr','opening_mrr','expense','receipt','debt','upgrade','downgrade'])
+const cash=new Set(['target','goal_sale','mrr','opening_mrr','expense','receipt','debt','contract_values','upgrade','downgrade'])
 const amount=(m:Metric)=>m.kind==='band'?pct(m.amount):cash.has(m.kind)?brl(m.amount):m.kind==='visit_coverage'?(m.amount===1?'Visitado':'Pendente'):qty(m.amount)
 function explanation(m:Metric) {
   const x=m.details
+  if(m.kind==='contract_values') return [x.plan,x.seller_source,x.reason].filter(Boolean).join(' · ')
   if(m.kind==='goal_sale') return String(x.product)+' · '+brl(Number(x.gross))+' × '+pct(Number(x.rate)*100)
   if(m.kind==='expense') return [x.category,x.vehicle,x.trip,x.pending_limit?'Diárias ou pessoas pendentes':x.excess!=null?'Excedente '+brl(Number(x.excess)):null].filter(Boolean).join(' · ')
   if(m.kind==='band') return qty(Number(x.used))+' / '+qty(Number(x.capacity))+' Mbps'
@@ -83,7 +84,7 @@ export function Records({request,filters,onClose}:{request:DetailRequest;filters
             {debt&&<th>Nº da parcela</th>}
             <th>{titles?'Cliente':'Registro'}</th><th>Base</th>
             {showIds&&!debt&&<th>IDs de origem</th>}
-            {contracts&&<><th>Renovação</th><th>Valor total do contrato</th></>}
+            {contracts&&<><th>Renovação</th><th>Valor informado no PDF</th></>}
             <th>Vendedor</th><th>{debt?'Vencimento':titles?'Pagamento':'Data'}</th><th>{debt?'Saldo em aberto':'Valor / situação'}</th>
           </tr></thead>
           <tbody>{result.rows.map(m=><tr key={m.base_code+':'+m.row_key}>
@@ -93,8 +94,9 @@ export function Records({request,filters,onClose}:{request:DetailRequest;filters
             <td>{baseNames[m.base_code]}</td>
             {showIds&&!debt&&<td>{recordIdentifiers(m).filter(id=>!titles||id.key!=='title').map(id=>
               <small key={id.key}>{id.label} <strong>{id.value}</strong></small>)}</td>}
-            {contracts&&<><td>{dateLabel(typeof m.details.renewal==='string'?m.details.renewal:null)}</td>
-              <td>{brl(typeof m.details.contract_total==='number'?m.details.contract_total:null)}
+            {contracts&&<><td>{dateLabel(typeof (m.details.renewal??m.details.renewal_report)==='string'?String(m.details.renewal??m.details.renewal_report):null)}</td>
+              <td>{brl(typeof m.details.contract_total==='number'?m.details.contract_total:typeof m.details.monthly_report==='number'?m.details.monthly_report:null)}
+                <small>{m.details.contract_total!=null?'Total dos produtos':m.details.monthly_report!=null?'Líquido mensal':'Sem valor identificado'}</small>
                 {typeof m.details.contract_details_date==='string'&&<small>Relatório de {dateLabel(m.details.contract_details_date)}</small>}</td></>}
             <td>{m.seller||'Pendente de vínculo'}</td><td>{dateLabel(m.occurred_on)}</td><td>{amount(m)}</td>
           </tr>)}</tbody>

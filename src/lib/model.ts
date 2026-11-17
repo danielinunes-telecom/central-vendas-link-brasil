@@ -71,13 +71,14 @@ export const sections = [
 ] as const
 export type Section = typeof sections[number]['key']
 export const sourceNames: Record<string, string> = {
-  customers: 'Cadastro de clientes', contracts: 'Contratos', contract_details: 'Contratos detalhados (PDF)', sales: 'Vendas',
+  customers: 'Cadastro de clientes', contracts: 'Contratos', contract_details: 'Contratos detalhados (PDF)', contract_values: 'Contratos com vendedor e valor mensal (PDF)', sales: 'Vendas',
   titles: 'Títulos', open_titles: 'Títulos em aberto', payments: 'Recebimentos',
   debts: 'Inadimplência', leads: 'Leads', activities: 'Atividades e visitas',
   negotiations: 'Negociações', changes: 'Alterações de contrato', expenses: 'Life Tracker',
   items: 'Itens do contrato', band: 'Uso de banda', seller_directory: 'Cadastro de vendedores (IXC)',
 }
 export const metricNames: Record<string,string> = {
+  contract_values:'Contratos e valores do relatório com vendedor',
   target:'Metas individuais', goal_sale:'Vendas contabilizadas na meta', goal_pending:'Ativações pendentes de validação',
   active_contract:'Contratos ativos', active_client:'Clientes ativos', opening_contract:'Contratos na abertura', mrr:'Receita recorrente estimada',
   activation:'Ativações', cancellation:'Cancelamentos', upgrade:'Upgrades', downgrade:'Downgrades',

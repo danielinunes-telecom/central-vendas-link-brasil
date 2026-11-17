@@ -22,6 +22,7 @@ export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;ins
 export function Portfolio({data,inspect}:{data:DashboardData;inspect:Inspect}) {
   const [tab,setTab]=useState<'base'|'finance'|'band'>('base')
   const {base}=data
+  const reported=line(data,'contract_values')
   return <>
     <div className="kpis">
       <Kpi label="Clientes ativos" value={qty(base.clients.end)} description={qty(base.unresolved)+' contratos com vínculo pendente'} icon={Users} onClick={()=>inspect('active_client')}/>
@@ -30,6 +31,13 @@ export function Portfolio({data,inspect}:{data:DashboardData;inspect:Inspect}) {
       <Kpi label="Inadimplência de 60 dias" value={data.state.debts?brl(line(data,'debt').amount):'—'} description={data.state.debts?
         qty(line(data,'debt').count)+' títulos'+(data.state.debt_as_of?' · posição de '+dateLabel(data.state.debt_as_of):' no período'):'Aguardando títulos'} icon={CircleDollarSign} tone="amber" onClick={()=>inspect('debt')}/>
     </div>
+    {reported.count>0&&<Card title="Contratos e valores do PDF com vendedor" description="Quantidade de registros e valor líquido mensal informado pelo IXC">
+      <div className="simple-rows">
+        <button onClick={()=>inspect('contract_values')}><BriefcaseBusiness size={17}/><span>Contratos no relatório</span><strong>{qty(reported.count)}</strong></button>
+        <button onClick={()=>inspect('contract_values')}><Banknote size={17}/><span>Valor líquido mensal do relatório</span><strong>{brl(reported.amount)}</strong></button>
+      </div>
+      <div className="card-foot">O detalhamento sinaliza os registros cujo ID do contrato ainda precisa ser confirmado.</div>
+    </Card>}
     <div className="view-tabs" aria-label="Análises da carteira">
       {([['base','Movimentação'],['finance','Financeiro e contratos'],['band','Uso de banda']] as const).map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>)}
     </div>

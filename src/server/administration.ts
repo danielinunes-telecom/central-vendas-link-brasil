@@ -73,7 +73,7 @@ export async function submitFiles(current:Viewer,form:FormData) {
   if (!files.length || files.length>25) throw new HttpError(400,'Selecione até 25 relatórios por envio.')
   if (files.reduce((sum,f)=>sum+f.size,0)>maxBatchBytes) throw new HttpError(413,'O lote ultrapassa 100 MB.')
   if (files.some(f=>!extension.test(path.extname(f.name)) || f.size===0 || f.size>maxFileBytes)) {
-    throw new HttpError(400,'Use arquivos .xlsx, .xls ou o PDF de alterações, com até 25 MB por arquivo.')
+    throw new HttpError(400,'Use arquivos .xlsx, .xls ou os PDFs de contratos e alterações, com até 25 MB por arquivo.')
   }
   const selectedBase=form.get('base')
   if (selectedBase!=='old'&&selectedBase!=='new'&&!(demoMode()&&selectedBase==null)) {

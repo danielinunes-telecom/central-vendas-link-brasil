@@ -53,7 +53,7 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     setError('');setMessage('')
     const picked=Array.from(incoming)
     const eligible=picked.filter(f=>/\.(xlsx|xls|pdf)$/i.test(f.name)&&f.size>0&&f.size<=25*1024*1024)
-    if(eligible.length!==picked.length){setError('Use apenas Excel ou o PDF de contratos detalhados ou de alterações, com até 25 MB por arquivo.');return}
+    if(eligible.length!==picked.length){setError('Use apenas Excel ou o PDF de contratos detalhados, com vendedor ou de alterações, com até 25 MB por arquivo.');return}
     if(eligible.length>25||eligible.reduce((n,f)=>n+f.size,0)>100*1024*1024){setError('Envie até 25 relatórios e 100 MB por lote.');return}
     if(!base){setError('Selecione a base de origem do lote.');return}
     if(!observed){setError('Informe a data da extração.');return}
@@ -88,7 +88,7 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
           <input type="file" ref={selector} onChange={e=>{if(e.target.files)add(e.target.files);e.target.value=''}} multiple accept=".xlsx,.xls,.pdf" hidden/>
           <div className={'dropzone '+(drag?'drag':'')} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);add(e.dataTransfer.files)}}>
-            <UploadCloud size={27}/><strong>Arraste seus relatórios aqui</strong><span>Excel e PDF de contratos detalhados ou de alterações · até 25 MB por arquivo</span>
+            <UploadCloud size={27}/><strong>Arraste seus relatórios aqui</strong><span>Excel e PDF de contratos detalhados, com vendedor ou de alterações · até 25 MB por arquivo</span>
             <button className="secondary" onClick={()=>selector.current?.click()} disabled={sending}>
               {sending?<><LoaderCircle size={15} className="spin"/>Enviando…</>:'Selecionar arquivos'}</button>
           </div>

@@ -74,6 +74,12 @@ def contract(row):
     }
 
 
+def contract_values(row):
+    return keys(row, client_key="ID CLIENTE") | labels(row, client="CLIENTE", plan="PLANO RELATORIO",
+        seller="VENDEDOR") | dates(row, activated="ATIVACAO", renewal="RENOVACAO") | amounts(
+        row, monthly="VALOR MENSAL RELATORIO", installation="TAXA INSTALACAO")
+
+
 def contract_details(row):
     return keys(row, contract_key="ID CONTRATO", client_key="ID CLIENTE") | dates(
         row, activated="ATIVACAO", renewal="RENOVACAO"
@@ -159,6 +165,8 @@ def item(row):
 
 # (name, signature columns, key, event date, load strategy, transform)
 SCHEMAS = (
+    ("contract_values", {"ID CLIENTE","PLANO RELATORIO","VALOR MENSAL RELATORIO","VENDEDOR","TAXA INSTALACAO"},
+     None, None, "snapshot", contract_values),
     ("seller_directory", {"ID USUARIO","NOME","ID VENDEDOR","ID COLABORADOR"}, "user_key", None, "snapshot", seller_directory),
     ("customers", {"ID","RAZAO SOCIAL","CNPJ/CPF","RESPONSAVEL","DATA CADASTRO"}, "customer_key", None, "snapshot", customer),
     ("contract_details", {"ID CLIENTE","ID CONTRATO","ATIVACAO","RENOVACAO","VALOR TOTAL CONTRATO"}, "contract_key", None, "snapshot", contract_details),
