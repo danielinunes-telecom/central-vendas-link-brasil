@@ -1,0 +1,33 @@
+# Worker-only Blueprint: does not adopt or modify the existing web service.
+services:
+  - type: worker
+    name: central-vendas-importador
+    runtime: docker
+    repo: https://github.com/danielinunes-telecom/central-vendas-link-brasil
+    branch: main
+    region: oregon
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile.worker
+    dockerContext: .
+    autoDeployTrigger: commit
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        fromService:
+          name: central-vendas-link-brasil
+          type: web
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_SERVER_KEY
+        fromService:
+          name: central-vendas-link-brasil
+          type: web
+          envVarKey: SUPABASE_SERVER_KEY
+      - key: IMPORT_BUCKET
+        value: link-brasil-importacoes
+      - key: IMPORT_QUEUE
+        value: pgmq
+      - key: PGSSLMODE
+        value: require

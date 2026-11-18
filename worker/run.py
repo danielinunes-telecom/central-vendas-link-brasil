@@ -4,8 +4,9 @@ from datetime import date
 import hashlib
 import logging
 import os
+import signal
+from threading import Event
 from pathlib import Path
-import time
 from urllib.parse import quote
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -189,34 +190,78 @@ def cli_import(conn, paths, observed, base_code='legacy'):
     print(batch)
 
 
+def configuration_error(mode):
+    required = ["DATABASE_URL"]
+    if not os.environ.get("IMPORT_LOCAL_PATH"):
+        required += ["SUPABASE_URL", "SUPABASE_SERVER_KEY"]
+    missing = [key for key in required if not os.environ.get(key, "").strip()]
+    if missing:
+        return "Configure as variáveis do importador: " + ", ".join(missing)
+    if mode not in {"pgmq", "local"}:
+        return "IMPORT_QUEUE deve ser pgmq ou local."
+    return None
+
+
+def queue_status(conn, mode):
+    if mode == "pgmq" and not conn.execute(
+        "select exists(select from pgmq.list_queues() where queue_name='lb_imports')"
+    ).fetchone()[0]:
+        raise RuntimeError("Fila lb_imports ausente. Execute db/supabase.sql no Supabase.")
+    rows = conn.execute("""select status,count(*) from comercial.import_batches
+        where status in ('queued','processing','failed') group by status""").fetchall()
+    counts = dict(rows)
+    latest = conn.execute("select max(loaded_at) from comercial.source_loads").fetchone()[0]
+    logging.info("Importer connected: queued=%s processing=%s failed=%s last_load=%s",
+        counts.get("queued",0),counts.get("processing",0),counts.get("failed",0),latest or "none")
+
+
+def run_queue(conn, mode, once, stopping):
+    while not stopping.is_set():
+        worked = poll(conn,mode)
+        if once:
+            return
+        if not worked:
+            stopping.wait(2)
+
+
 def main():
     logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--once",action="store_true")
+    parser.add_argument("--check",action="store_true",help="Conferir configuração, banco e fila sem processar arquivos")
     parser.add_argument("--base",choices=("old","new","legacy"),default="legacy")
     parser.add_argument("--observed",type=date.fromisoformat)
     parser.add_argument("--load",nargs="+",type=Path)
     args=parser.parse_args()
     mode = os.environ.get("IMPORT_QUEUE","pgmq")
-    while True:
+    problem = configuration_error(mode)
+    if problem:
+        parser.error(problem)
+    stopping = Event()
+    def stop(signum, frame):
+        logging.info("Shutdown requested; finishing the current import before exiting")
+        stopping.set()
+    signal.signal(signal.SIGTERM,stop)
+    signal.signal(signal.SIGINT,stop)
+    logging.info("Starting importer; queue=%s",mode)
+    while not stopping.is_set():
         try:
             with psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,connect_timeout=10) as conn:
+                queue_status(conn,mode)
+                if args.check:
+                    return
                 if args.load:
                     cli_import(conn,args.load,args.observed or date.today(),args.base)
                     return
-                while True:
-                    worked = poll(conn,mode)
-                    if args.once:
-                        return
-                    if not worked:
-                        time.sleep(2)
-        except psycopg.OperationalError:
-            if args.once or args.load:
+                run_queue(conn,mode,args.once,stopping)
+                return
+        except psycopg.OperationalError as err:
+            if args.once or args.load or args.check:
                 raise
-            logging.warning("Waiting for the database")
-            time.sleep(5)
+            logging.warning("Database unavailable; retrying in 5 seconds (sqlstate=%s)",err.sqlstate or "connection")
+            stopping.wait(5)
+    logging.info("Importer stopped")
 
 
 if __name__ == "__main__":
     main()
-

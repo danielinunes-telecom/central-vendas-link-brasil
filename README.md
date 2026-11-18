@@ -150,3 +150,20 @@ pelo conteúdo, independentemente do nome do arquivo.
 Execute `db/009_full_sales_value.sql` no SQL Editor do Supabase, após as migrações anteriores. O script pode ser executado novamente e recalcula os meses já importados. Todas as vendas finalizadas contam pelo valor integral, independentemente do serviço, do plano ou do tipo de documento. Não é necessário cadastrar pesos nem mapear planos para apurar a meta. As metas mensais por vendedor e a competência pela ativação permanecem.
 
 A conferência manual e os itens vinculados continuam tendo prioridade. Sem itens, uma única venda finalizada vinculada ao contrato fornece seu total; vários documentos para o mesmo contrato continuam pendentes de conferência para evitar duplicidade. O valor mensal do PDF de contratos permanece complementar e não substitui silenciosamente um valor divergente do relatório de vendas.
+
+
+## Importador independente do Windows
+
+O site e o importador são serviços diferentes. Publicar o site não inicia o processamento da fila.
+O arquivo `render.worker.yaml` define apenas o novo serviço `central-vendas-importador`, sem alterar o site existente. O Dockerfile já inclui o leitor atualizado dos PDFs e as dependências Python.
+
+1. No Render, crie um Blueprint deste repositório com o caminho `render.worker.yaml` e revise o plano antes de ativá-lo.
+2. Configure `DATABASE_URL` no Environment do novo importador com a conexão **Session pooler** completa e a senha atual do banco. Use uma conta com permissão para importar no esquema comercial e consumir a fila pgmq. Não use a conexão de consulta restrita do dashboard nem uma chave de API no lugar da conexão PostgreSQL.
+3. `SUPABASE_URL` e `SUPABASE_SERVER_KEY` são referenciadas do serviço web já existente. A fila é `pgmq` e o bucket é `link-brasil-importacoes`.
+4. Após a ativação, confirme nos logs `Importer connected` e a conclusão de um lote enviado pelo painel. Então feche o importador local e repita o envio com o computador local fora do processamento.
+
+O serviço contínuo usa inicialmente 0,5 CPU e 512 MB (plano pago). Valide o custo no plano do Render antes de aprovar. Caso um arquivo exceda a memória, avalie os logs antes de mudar o plano.
+
+Os arquivos originais e a fila permanecem no Supabase; o importador não precisa de disco persistente. Recebendo SIGTERM, ele termina o lote atual antes de parar de consumir a fila, com até 300 segundos de encerramento no Render. Se houver interrupção forçada, a transação é revertida e a mensagem volta após o prazo de visibilidade de 15 minutos. Lotes já marcados como falhos não são reenviados automaticamente; o histórico informa a falha e o arquivo corrigido deve ser anexado novamente.
+
+Para diagnóstico, `python -m worker.run --check` confere a configuração, a conexão, a existência da fila e informa quantidades de lotes aguardando, em processamento e falhos, sem consumir mensagens. Isso não verifica os valores comerciais de cada contrato. O caso COREVAULT (contrato 1005 da Base Nova) continua exigindo a consulta das vendas vinculadas: a última informação disponível é uma pendência de confirmação de valor.
