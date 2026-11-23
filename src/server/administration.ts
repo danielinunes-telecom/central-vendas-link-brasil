@@ -47,8 +47,16 @@ export async function settingsFor(current:Viewer) {
   return asUser(current.email,async db=>{
     const result=(await db.query<{data:AdminData|null}>('select comercial.admin_settings() data')).rows[0].data
     if (!result) throw new HttpError(403,'Acesso insuficiente.')
+    result.corrections=(await db.query<{data:AdminData['corrections']}>('select comercial.correction_queue() data')).rows[0].data||[]
     return result
   })
+}
+
+const correction=z.object({kind:z.enum(['goal','contract_link','cancellation']),base:z.enum(['old','new','legacy']),row:text,
+  value:z.record(z.string(),z.union([z.string().max(500),z.number().nonnegative().max(999_999_999)]))})
+export async function saveCorrection(current:Viewer,body:unknown){
+  const v=correction.parse(body)
+  return asUser(current.email,db=>db.query('select comercial.save_correction($1,$2,$3,$4::jsonb)',[v.kind,v.base,v.row,JSON.stringify(v.value)]))
 }
 
 export async function saveSetting(current:Viewer,body:unknown) {

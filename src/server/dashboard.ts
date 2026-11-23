@@ -117,7 +117,9 @@ async function dashboardMonthly(current: Viewer, filters: Filters): Promise<Dash
       "from comercial.metric_rows where month=$1::date and ($2='' or seller_key=$2) and base_code=any($3::text[])",[filters.month+'-01',filters.seller,bases])).rows[0]
     const a = await aggregate(db,filters,bases)
     const c=a.countBase
-    const visit = a.summary.find(l=>l.kind==='visit_coverage')
+    const visit = a.summary.find(l=>l.kind==='visit_task')
+    const activeContracts=a.summary.find(l=>l.kind==='active_contract')?.count??0
+    const activities=visit?.count??0
     return {
       viewer:current, filters, options: { sellers:sellerList, branches:options.branches||[], cities:options.cities||[], products:options.products||[] },
       lines:a.summary, goals:a.goals, daily:a.daily, expenses:a.expenses, pipeline:a.pipeline, state, observed,
@@ -128,7 +130,7 @@ async function dashboardMonthly(current: Viewer, filters: Filters): Promise<Dash
         contracts:pair(state.opening?c.c0:null,state.closing?c.c1:null,c.centry,c.cexit),
         mrr:pair(val(c.m0),val(c.m1),c.mentry,c.mexit), unresolved:c.unresolved,
       },
-      coverage:{active:visit?.count??0,visited:visit?.coverage??0,pending:(visit?.count??0)-(visit?.coverage??0),older:a.summary.find(l=>l.kind==='visit_overdue')?.count??0},
+      coverage:{active:activeContracts,visited:activities,pending:Math.max(activeContracts-activities,0),older:a.summary.find(l=>l.kind==='visit_overdue')?.count??0},
       bandwidth:{trend:a.trend,circuits:a.circuits},
     }
   })

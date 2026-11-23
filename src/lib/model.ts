@@ -66,7 +66,9 @@ export type AdminData = {
   sellers: Seller[]
   accounts: (Viewer & { active: boolean })[]
   changes: { setting: string; changed_by: string; changed_at: string }[]
+  corrections: CorrectionIssue[]
 }
+export type CorrectionIssue = { key:string; kind:string; base_code:BaseCode; month:string|null; row_key:string; label:string; reason:string; details:Record<string,unknown> }
 
 export const earliestMonth = '2026-10'
 export const roles: Record<Role, string> = { admin: 'Administrador', manager: 'Gestor', seller: 'Vendedor' }
@@ -81,7 +83,7 @@ export const sections = [
 ] as const
 export type Section = typeof sections[number]['key']
 export const sourceNames: Record<string, string> = {
-  customers: 'Cadastro de clientes', contracts: 'Contratos', contract_details: 'Contratos detalhados (PDF)', contract_values: 'Contratos com vendedor e valor mensal (PDF)', sales: 'Vendas',
+  customers: 'Cadastro de clientes', contracts: 'Contratos', contract_links:'Vínculos de clientes e contratos', contract_details: 'Contratos detalhados (PDF)', contract_values: 'Contratos com vendedor e valor mensal (PDF)', sales: 'Vendas',
   titles: 'Títulos', open_titles: 'Títulos em aberto', payments: 'Recebimentos',
   debts: 'Inadimplência', leads: 'Leads', activities: 'Atividades e visitas',
   negotiations: 'Negociações', changes: 'Alterações de contrato', expenses: 'Life Tracker',

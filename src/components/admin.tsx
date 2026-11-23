@@ -1,8 +1,8 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowRight, CircleCheck, ClipboardList, Database, FileSpreadsheet, History, LoaderCircle, Plus, Settings2, UploadCloud } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CircleCheck, ClipboardList, Database, FileSpreadsheet, History, LoaderCircle, Plus, Settings2, UploadCloud, Wrench } from 'lucide-react'
 import { brl, dateLabel, pct, qty } from '@/lib/format'
-import { baseNames, roles, sourceNames, type AdminData, type ImportBatch, type Role, type SourceStatus } from '@/lib/model'
+import { baseNames, roles, sourceNames, type AdminData, type CorrectionIssue, type ImportBatch, type Role, type SourceStatus } from '@/lib/model'
 import { Card, Empty } from './indicators'
 
 const stateText:Record<string,string>={queued:'Na fila',processing:'Processando',complete:'Concluída',partial:'Concluída com avisos',failed:'Falhou',applied:'Importado',unchanged:'Já atualizado'}
@@ -11,12 +11,43 @@ const sizeLabel=(n:number)=>n>=1024*1024?(n/(1024*1024)).toFixed(1).replace('.',
 type ImportHistory={batches:ImportBatch[];sources:SourceStatus[]}
 
 export function Administration({today,onUpdated}:{today:string;onUpdated:()=>void}) {
-  const [tab,setTab]=useState<'imports'|'settings'>('imports')
+  const [tab,setTab]=useState<'imports'|'corrections'|'settings'>('imports')
   return <>
     <div className="view-tabs"><button className={tab==='imports'?'active':''} onClick={()=>setTab('imports')}><UploadCloud size={16}/> Importações</button>
+      <button className={tab==='corrections'?'active':''} onClick={()=>setTab('corrections')}><Wrench size={16}/> Correções</button>
       <button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}><Settings2 size={16}/> Configurações</button></div>
-    {tab==='imports'?<ImportPanel today={today} onUpdated={onUpdated}/>:<SettingsPanel today={today} onUpdated={onUpdated}/>}
+    {tab==='imports'?<ImportPanel today={today} onUpdated={onUpdated}/>:tab==='corrections'?<CorrectionsPanel onUpdated={onUpdated}/>:<SettingsPanel today={today} onUpdated={onUpdated}/>}
   </>
+}
+
+function CorrectionsPanel({onUpdated}:{onUpdated:()=>void}){
+  const [data,setData]=useState<AdminData|null>(null),[selected,setSelected]=useState<CorrectionIssue|null>(null)
+  const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
+  const read=useCallback(async()=>{const r=await fetch('/api/admin/corrections',{cache:'no-store'});const b=await r.json();if(!r.ok)throw new Error(b.error);setData(b)},[])
+  useEffect(()=>{read().catch(e=>setError(e.message))},[read])
+  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;setBusy(true);setError('');setMessage('')
+    const f=new FormData(e.currentTarget),value=selected.kind==='goal'?{seller:String(f.get('seller')),product:String(f.get('product')),total:Number(f.get('total')),note:String(f.get('note'))}
+      :selected.kind==='contract_link'?{client:String(f.get('client')),note:String(f.get('note'))}
+      :{classification:String(f.get('classification')),note:String(f.get('note'))}
+    try{const r=await fetch('/api/admin/corrections',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:selected.kind,base:selected.base_code,row:selected.row_key,value})});if(!r.ok)throw new Error((await r.json()).error)
+      setMessage('Correção salva e competências recalculadas.');setSelected(null);await read();onUpdated()
+    }catch(e){setError(e instanceof Error?e.message:'Falha ao salvar a correção.')}finally{setBusy(false)}}
+  if(!data)return <Card title="Correções pendentes"><div className="import-body">{error?<div className="notice error">{error}</div>:'Consultando validações…'}</div></Card>
+  const actionable=data.corrections.filter(i=>i.kind!=='import'),imports=data.corrections.filter(i=>i.kind==='import')
+  return <div className="settings-stack">{message&&<div className="notice success"><CircleCheck size={16}/>{message}</div>}{error&&<div className="notice error">{error}</div>}
+    <Card title="Validações pendentes" description="Registros que não puderam ser confirmados automaticamente.">
+      {actionable.length?<div className="table-scroll"><table className="data-table"><thead><tr><th>Competência</th><th>Base</th><th>Registro</th><th>Motivo</th><th>Ação</th></tr></thead><tbody>
+        {actionable.map(i=><tr key={i.key}><td>{i.month?i.month.slice(0,7):'—'}</td><td>{baseNames[i.base_code]}</td><td><strong>{i.label}</strong><small>ID {i.row_key}</small></td><td>{i.reason}</td><td><button className="secondary" onClick={()=>setSelected(i)}>Corrigir</button></td></tr>)}</tbody></table></div>
+      :<Empty title="Nenhuma correção pendente" description="As importações disponíveis foram validadas automaticamente." icon={CircleCheck}/>}</Card>
+    {selected&&<Card title={'Corrigir · '+selected.label} description={selected.reason}><form className="settings-form" onSubmit={save}>
+      {selected.kind==='goal'&&<><label>Vendedor<select name="seller" required>{data.sellers.map(s=><option key={s.seller_key} value={s.seller_key}>{s.name}</option>)}</select></label>
+        <div className="form-pair"><label>Descrição do produto<input name="product" defaultValue={String(selected.details.original_description||'')} required/></label><label>Valor total do contrato<input name="total" type="number" min="0" step="0.01" defaultValue={String(selected.details.contract_total||'')} required/></label></div></>}
+      {selected.kind==='contract_link'&&<label>ID do cliente correto<input name="client" required/></label>}
+      {selected.kind==='cancellation'&&<label>Classificação<select name="classification"><option value="request">Solicitação</option><option value="effective">Cancelamento efetivado</option><option value="reversed">Reversão confirmada</option><option value="pending">Manter pendente</option></select></label>}
+      <label>Justificativa da correção<input name="note" minLength={4} required/></label><div className="form-pair"><button type="submit" className="primary" disabled={busy}>Salvar e recalcular</button><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button></div>
+    </form></Card>}
+    {!!imports.length&&<Card title="Avisos dos arquivos" description="Erros estruturais exigem correção no arquivo e novo envio."><div className="simple-rows">{imports.map(i=><div key={i.key}><AlertTriangle size={16}/><span>{i.label}<small>{i.reason}</small></span><strong>{baseNames[i.base_code]}</strong></div>)}</div></Card>}
+  </div>
 }
 
 function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
@@ -157,7 +188,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
   }
   const saveBtn=(name='Salvar')=><button type="submit" className="primary" disabled={busy}>{name}</button>
   if(!data)return <Card title="Configurações"><div className="import-body">{error?<div className="notice error">{error}</div>:<p>Carregando configurações…</p>}</div></Card>
-  const limits=data.rules.expense_limits as {meal:number;lodging:number},visit=data.rules.visit_rules as {visit:string[];prospect:string[]}
+  const limits=data.rules.expense_limits as {meal:number;lodging:number}
   const products=Array.from(new Set(data.rates.map(r=>r.product)))
   const month=today.slice(0,7)
   const sellers=<>{data.sellers.map(s=><option key={s.seller_key} value={s.seller_key}>{s.name}</option>)}</>
@@ -171,15 +202,12 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
           <label>Meta em reais<input name="amount" type="number" min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
         </form>
       </Card>
-      <Card title="Cálculo das vendas" description="Todos os serviços e planos contam pelo valor integral vendido.">
-        <p>O realizado é a soma das vendas validadas, sem aplicar percentuais por produto. As metas mensais de cada vendedor continuam configuráveis.</p>
+      <Card title="Cálculo das vendas" description="Baseado no contrato mais recente do cliente.">
+        <p>O realizado usa o valor total do contrato mais recente vinculado ao cliente e aplica o percentual da categoria do produto. Casos sem valor, vínculo, vendedor ou classificação aparecem na aba Correções.</p>
       </Card>
     </div>
     <div className="content-grid equal-grid">
-      <Card title="Identificação das visitas"><form className="settings-form" onSubmit={e=>save(e,'visit_rules',f=>({visit:split(f.get('visit')),prospect:split(f.get('prospect'))}))}>
-        <label>Palavras de visita à carteira<input name="visit" defaultValue={strings(visit?.visit)} required/></label>
-        <label>Palavras de prospecção<input name="prospect" defaultValue={strings(visit?.prospect)}/></label>{saveBtn()}
-      </form></Card>
+      <Card title="Cálculo das visitas" description="Todas as atividades são consideradas."><div className="import-body"><p>Meta mensal: um registro por contrato ativo do vendedor. Realizado: quantidade de atividades registradas, independentemente do assunto ou status.</p></div></Card>
       <Card title="Limites de despesas"><form className="settings-form" onSubmit={e=>save(e,'expense_limits',f=>({meal:Number(f.get('meal')),lodging:Number(f.get('lodging'))}))}>
         <label>Almoço e jantar por refeição<input name="meal" type="number" min="0" step="0.01" defaultValue={limits?.meal} required/></label>
         <label>Hospedagem por pessoa e diária<input name="lodging" type="number" min="0" step="0.01" defaultValue={limits?.lodging} required/></label>{saveBtn()}
@@ -191,7 +219,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
         <label>Percentual mínimo de utilização<input name="threshold" type="number" min="1" max="100" defaultValue={Number(data.rules.band_threshold||80)} required/></label>{saveBtn()}
       </form></Card>
     </div>
-    <Card title="Validação da meta" description="Todas as vendas finalizadas são consideradas pelo valor integral. Confira abaixo os casos com vínculo ou valor pendente.">
+    <Card title="Validação da meta" description="As correções principais agora são apresentadas automaticamente na aba Correções.">
       <details className="settings-disclosure"><summary>Validar uma ativação específica</summary>
         <form className="settings-form" onSubmit={e=>save(e,'sale_review',f=>({contract:f.get('contractBase')==='legacy'?f.get('contract'):String(f.get('contractBase'))+':'+String(f.get('contract')),seller:f.get('seller'),note:f.get('note'),
           items:Array.from({length:items},(_,i)=>({product:f.get('product'+i),total:Number(f.get('total'+i))}))}))}>

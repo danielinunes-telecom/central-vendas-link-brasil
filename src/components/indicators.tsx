@@ -48,7 +48,7 @@ export function OverviewKpis({data:d,inspect}:{data:DashboardData;inspect:Inspec
     <Kpi label="Saldo líquido da base" value={net==null?qty(d.base.contracts.end):(net>0?'+':'')+qty(net)}
       description={net==null?'Contratos ativos · abertura pendente':qty(d.base.contracts.end)+' contratos ativos no período'} icon={BriefcaseBusiness} tone="teal" onClick={()=>inspect('active_contract')}/>
     <Kpi label="Visitas à carteira" value={d.state.visits?pct(ratio(d.coverage.visited,d.coverage.active)):'—'}
-      description={d.state.visits?qty(d.coverage.visited)+' de '+qty(d.coverage.active)+' clientes visitados':'Aguardando atividades'} icon={MapPinCheck} tone="violet" onClick={()=>inspect('visit_coverage')}/>
+      description={d.state.visits?qty(d.coverage.visited)+' atividades para '+qty(d.coverage.active)+' contratos ativos':'Aguardando atividades'} icon={MapPinCheck} tone="violet" onClick={()=>inspect('visit_task')}/>
     <Kpi label="Despesas em campo" value={d.state.expenses?brl(expense.amount):'—'} description={d.state.expenses?qty(expense.count)+' lançamentos no período':'Aguardando Life Tracker'}
       icon={ReceiptText} tone="amber" onClick={()=>inspect('expense')}/>
   </div>
@@ -86,15 +86,15 @@ export function VisitsCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}
       ]}],
     graphic:{type:'text',left:'center',top:'middle',style:{text:pct(rate),fill:'#152846',font:'800 29px Manrope Variable, sans-serif',textAlign:'center'}},
   }
-  return <Card title="Cobertura de visitas" description="Uma visita por cliente na competência"
-    action={<button className="icon-button subtle" aria-label="Abrir registros de visitas" onClick={()=>inspect('visit_coverage')}><ArrowUpRight size={18}/></button>}>
-    {d.state.visits&&c.active?<><Chart height={153} option={option} label={'Cobertura de visitas '+pct(rate)} onClick={e=>inspect('visit_coverage',e.dataIndex===0?'visited':'pending')}/>
+  return <Card title="Cobertura de atividades" description="Uma atividade por contrato ativo na competência"
+    action={<button className="icon-button subtle" aria-label="Abrir atividades" onClick={()=>inspect('visit_task')}><ArrowUpRight size={18}/></button>}>
+    {d.state.visits&&c.active?<><Chart height={153} option={option} label={'Cobertura de atividades '+pct(rate)} onClick={()=>inspect('visit_task')}/>
       <div className="visit-breakdown">
-        <button onClick={()=>inspect('visit_coverage','visited')}><span><i className="dot blue"/>Visitados</span><strong>{qty(c.visited)}</strong></button>
-        <button onClick={()=>inspect('visit_coverage','pending')}><span><i className="dot pale"/>Pendentes</span><strong>{qty(c.pending)}</strong></button>
+        <button onClick={()=>inspect('visit_task')}><span><i className="dot blue"/>Atividades registradas</span><strong>{qty(c.visited)}</strong></button>
+        <div><span><i className="dot pale"/>Atividades restantes</span><strong>{qty(c.pending)}</strong></div>
       </div>
-    </>:<Empty title={d.state.visits?'Sem carteira identificada':'Aguardando atividades'} description="A cobertura considera os registros vinculados de visita e relacionamento, em todos os status." icon={MapPinCheck}/>}
-    {d.state.visits&&c.active>0&&<div className="card-foot"><Clock3 size={14}/>{qty(c.active)} clientes na cobertura do mês</div>}
+    </>:<Empty title={d.state.visits?'Sem contratos ativos identificados':'Aguardando atividades'} description="Toda atividade registrada conta, sem filtro de assunto ou status." icon={MapPinCheck}/>}
+    {d.state.visits&&c.active>0&&<div className="card-foot"><Clock3 size={14}/>{qty(c.active)} contratos ativos · cobertura {pct(rate)}</div>}
   </Card>
 }
 

@@ -24,6 +24,7 @@ def workbook(directory, name, header, data):
 
 CLIENT = "ID|Razão social|Nome Fantasia/Social|CNPJ/CPF|Responsável|Data cadastro|Ativo|Cidade|Filial"
 CONTRACT = "ID|Cliente|ID Cliente|Status contrato|Status acesso|Data ativação|Data cancelamento|Data de expiração|Data primeira assinatura|Status assinatura|Plano de venda|Descrição|Cidade|Filial"
+CONTRACT_DETAIL = "ID Cliente|Cliente|ID Contrato|Contrato|Ativação|Renovação|Valor Total Contrato"
 SALE = "ID|Data da emissão|Vendedor|Contrato R|Contrato A|Valor|Status|Tipo doc."
 ITEM = "ID Item|ID Contrato|ID Venda|Produto|Tipo de cobrança|Valor Item|Vendedor"
 TITLE = "ID|Cliente|ID Cliente|Status|Vencimento|Valor|Valor aberto|Valor recebido|Data pagamento|ID Contrato Recorrente|Parcela proporcional|Tipo"
@@ -42,8 +43,8 @@ CONNECTIONS = ("Órbita","Pórtico","Rota Sul","Camada 7","Rumo","Plano Norte","
 
 def seed(conn, observed, folder):
     rnd = Random(101)
-    opening_people, opening_contracts, opening_items, opening_titles = [], [], [], []
-    persons, contracts, items, sales, titles, debts, activities, leads, deals, expenses, changes, band = ([] for _ in range(12))
+    opening_people, opening_contracts, opening_details, opening_items, opening_titles = [], [], [], [], []
+    persons, contracts, details, items, sales, titles, debts, activities, leads, deals, expenses, changes, band = ([] for _ in range(13))
     previous, current = date(2026,10,31), observed
     build = lambda name, header, data: workbook(folder,name,header,data)
     for i in range(84):
@@ -58,6 +59,7 @@ def seed(conn, observed, folder):
         activation=date(2026,9,2+i%20)
         opening_people.append((key,name,name,None,owner,activation,"Sim",city,branch))
         opening_contracts.append((key,name,key,"Ativo","Ativo",activation,None,date(2027,9,1),activation,"Assinado",key,product,city,branch))
+        opening_details.append((key,name,key,product,activation,date(2027,9,1),base_value))
         opening_items.append((key,key,None,product,"Recorrente",base_value,seller))
         opening_titles.append((key,name,key,"Recebido",date(2026,10,21),base_value,0,base_value,date(2026,10,21),key,"N","Boleto"))
         new = i>=72
@@ -84,6 +86,7 @@ def seed(conn, observed, folder):
         persons.append((key,name,name,None,seller,activation,"Sim",city,branch))
         contracts.append((key,name,key,"Inativo" if cancelled else "Ativo","Bloqueado" if i%17==0 else "Ativo",activation,cancelled,expires,
                           None if i%37==0 else activation,"Pendente" if i%37==0 else "Assinado",key,product,city,branch))
+        details.append((key,name,key,product,activation,expires,base_value))
         paid=i%4!=0
         titles.append((5000+i,name,key,"Recebido" if paid else "A receber",date(2026,11,10),base_value,
                        0 if paid else base_value,base_value if paid else 0,date(2026,11,10) if paid else None,key,"N","Boleto"))
@@ -110,8 +113,8 @@ def seed(conn, observed, folder):
             expenses.append((j*10+i+1,seller,category,date(2026,11,2+i*2),"Veículo "+str(j+1),value,1,1))
     # The opening position must represent only contracts present before November.
     cli_import(conn,[build("Clientes abertura",CLIENT,opening_people[:72]),build("Contratos abertura",CONTRACT,opening_contracts[:72]),
-                     build("Itens abertura",ITEM,opening_items[:72]),build("Títulos abertura",TITLE,opening_titles[:72])],previous)
-    cli_import(conn,[build("Clientes",CLIENT,persons),build("Contratos",CONTRACT,contracts),build("Itens",ITEM,items),
+                     build("Contratos detalhados abertura",CONTRACT_DETAIL,opening_details[:72]),build("Itens abertura",ITEM,opening_items[:72]),build("Títulos abertura",TITLE,opening_titles[:72])],previous)
+    cli_import(conn,[build("Clientes",CLIENT,persons),build("Contratos",CONTRACT,contracts),build("Contratos detalhados",CONTRACT_DETAIL,details),build("Itens",ITEM,items),
                      build("Vendas",SALE,sales),build("Títulos",TITLE,titles),build("Inadimplência",DEBT,debts),
                      build("Contatos",LEAD,leads),build("Tarefas",ACT,activities),build("Negociações",DEAL,deals),
                      build("Despesas",EXPENSE,expenses),build("Alterações",CHANGE,changes),build("Banda",BAND,band)],current)

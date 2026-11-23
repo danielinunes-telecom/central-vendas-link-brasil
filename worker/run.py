@@ -20,8 +20,8 @@ from .readers import ReportError
 from .reports import parse_report
 
 MAX_BYTES = 25 * 1024**2
-ORDER = ("seller_directory","customers","contracts","contract_details","contract_values","items","sales","titles","open_titles","payments",
-         "debts","leads","negotiations","activities","changes","expenses","band")
+ORDER = ("seller_directory","customers","contracts","contract_links","contract_details","contract_values","items","sales","titles","open_titles","payments",
+         "debts","leads","negotiations","activities","changes","expenses","band","cancellation_orders")
 
 
 def original(key):

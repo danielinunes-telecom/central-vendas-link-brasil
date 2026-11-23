@@ -120,11 +120,11 @@ export function Crm({data,inspect}:{data:DashboardData;inspect:Inspect}) {
           :<Empty title="Sem negociações no período" icon={Users}/>}
       </Card>
     </div>
-    <Card title="Acompanhamento da carteira" description="Cobertura por cliente da Base Velha. Visitas e relacionamentos contam pela data de início, em todos os status.">
+    <Card title="Acompanhamento da carteira" description="Todas as atividades contam como visita, independentemente do assunto ou status.">
       <div className="simple-rows">
-        <button onClick={()=>inspect('visit_coverage','pending')}><MapPinCheck size={17}/><span>Clientes pendentes de visita no mês</span><strong>{qty(data.coverage.pending)}</strong></button>
-        <button onClick={()=>inspect('visit_coverage','visited')}><CircleCheck size={17}/><span>Clientes visitados na competência</span><strong>{qty(data.coverage.visited)}</strong></button>
-        <button onClick={()=>inspect('visit_overdue')}><FileClock size={17}/><span>Clientes com 60 dias sem visita</span><strong>{data.state.overdue?qty(data.coverage.older):'—'}</strong></button>
+        <button onClick={()=>inspect('active_contract')}><MapPinCheck size={17}/><span>Contratos ativos — meta de atividades</span><strong>{qty(data.coverage.active)}</strong></button>
+        <button onClick={()=>inspect('visit_task')}><CircleCheck size={17}/><span>Atividades registradas na competência</span><strong>{qty(data.coverage.visited)}</strong></button>
+        <button onClick={()=>inspect('visit_task')}><FileClock size={17}/><span>Atividades restantes para a meta</span><strong>{qty(data.coverage.pending)}</strong></button>
       </div>
     </Card>
   </>

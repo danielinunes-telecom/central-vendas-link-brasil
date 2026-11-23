@@ -86,6 +86,12 @@ def contract_details(row):
     ) | amounts(row, total="VALOR TOTAL CONTRATO")
 
 
+def contract_link(row):
+    return keys(row, contract_key="ID CONTRATO", client_key="ID CLIENTE") | dates(
+        row, activated="DATA ATIVACAO"
+    ) | amounts(row, total="VALOR CONTRATO") | labels(row, client="CLIENTE")
+
+
 def sale(row):
     return keys(row, sale_key="ID", recurring="CONTRATO R", one_time="CONTRATO A", doc_type="TIPO DOC.") | labels(
         row, seller="VENDEDOR", client="CLIENTE", status="STATUS", branch="FILIAL"
@@ -198,6 +204,7 @@ SCHEMAS = (
     ("seller_directory", {"ID USUARIO","NOME","ID VENDEDOR","ID COLABORADOR"}, "user_key", None, "snapshot", seller_directory),
     ("customers", {"ID","RAZAO SOCIAL","CNPJ/CPF","RESPONSAVEL","DATA CADASTRO"}, "customer_key", None, "snapshot", customer),
     ("contract_details", {"ID CLIENTE","ID CONTRATO","ATIVACAO","RENOVACAO","VALOR TOTAL CONTRATO"}, "contract_key", None, "snapshot", contract_details),
+    ("contract_links", {"ID CLIENTE","ID CONTRATO"}, "contract_key", None, "snapshot", contract_link),
     ("contracts", {"ID","STATUS CONTRATO","DATA ATIVACAO","PLANO DE VENDA"}, "contract_key", None, "snapshot", contract),
     ("items", {"ID CONTRATO","PRODUTO","VALOR ITEM","TIPO DE COBRANCA"}, "item_key", None, "snapshot", item),
     ("sales", {"ID","DATA DA EMISSAO","VENDEDOR","CONTRATO R","VALOR"}, "sale_key", "issued", "merge", sale),
@@ -248,6 +255,9 @@ def parse_report(name, data, observed_on):
             continue
         if source == "contract_details" and not (values["client_key"] and values["activated"] and values["total"] is not None):
             issues.append({"line": line, "message": "Cliente, ativação ou valor total inválido ou ausente."})
+            continue
+        if source == "contract_links" and not values["client_key"]:
+            issues.append({"line": line, "message": "ID do cliente ausente no vínculo com o contrato."})
             continue
         if source == "seller_directory" and not (values["name"] and values["collaborator_id"]):
             issues.append({"line": line, "message": "Nome ou ID de colaborador ausente."})
