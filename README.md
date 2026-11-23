@@ -2,6 +2,8 @@
 
 Painel comercial interno com Next.js, React, TypeScript, Apache ECharts, PostgreSQL e um importador Python. O painel e o importador são processos separados. As regras dos indicadores ficam em SQL, com permissões por linha no PostgreSQL.
 
+Para instalar o painel e o importador continuamente em uma VM, consulte [IMPLANTACAO_VM.md](IMPLANTACAO_VM.md). O arquivo `docker-compose.yml` executa os dois processos e `.env.example` documenta as variaveis sem incluir credenciais.
+
 ## Demonstração local
 
 Requer Node.js 22 ou mais recente, Python 3.12 e as dependências abaixo. O PostgreSQL de demonstração é iniciado pelo projeto.
@@ -17,7 +19,7 @@ Abra http://localhost:3000. A demonstração usa novembro de 2026, planilhas fic
 
 ## Implantação corporativa
 
-1. Em um projeto Supabase da Link Brasil, aplique `db/001_schema.sql` até `db/009_full_sales_value.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
+1. Em um projeto Supabase da Link Brasil, aplique as migrations de `db/001_schema.sql` até `db/011_contract_goal_activity_corrections.sql`, em ordem, e depois `db/supabase.sql`. O último cria a fila `lb_imports` e o bucket privado `link-brasil-importacoes`.
 2. Crie um login PostgreSQL dedicado à aplicação e conceda a ele a função `lb_dashboard`. Esse login deve entrar como um usuário próprio e poder assumir a função por `SET ROLE`. Use a conexão desse login em `DASHBOARD_DATABASE_URL`. O serviço Python usa `DATABASE_URL` com o usuário de banco que administra o esquema `comercial` e a fila, como o papel `postgres` do projeto. Mantenha os dois segredos no Render.
 3. No Supabase Auth, habilite login com e-mail e senha. Cadastre o primeiro administrador, confirme o endereço e registre o mesmo e-mail na tabela `comercial.accounts` com a função `admin`. Desative o cadastro público se o projeto for exclusivo da equipe. Depois, a tela Administração → Configurações vincula cada conta corporativa ao perfil correto.
 4. No Render, use o `render.yaml` do repositório privado. Ele cria apenas o serviço web no plano Free. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVER_KEY` e `DASHBOARD_DATABASE_URL` nas variáveis de ambiente do Render, e `APP_ORIGIN` com a origem HTTPS exata do painel (sem barra final). Use a conexão Session pooler do Supabase com SSL e o login restrito do passo 2.

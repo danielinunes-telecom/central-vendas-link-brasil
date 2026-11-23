@@ -1,10 +1,16 @@
-node_modules
-.next*
-.venv
-.local
-.env*
 .git
-__pycache__
-test-results
+.github
+.env
+.env.*
+.local
+.next
+.next-*
+.venv
+node_modules
 playwright-report
+test-results
+__pycache__
+*.pyc
+*.pyo
+*.tsbuildinfo
 
