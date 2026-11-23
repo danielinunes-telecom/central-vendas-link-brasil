@@ -26,7 +26,7 @@ export async function annualSummary(current:Viewer,params:URLSearchParams):Promi
        where extract(year from month)=$1 and base_code=any($2::text[])`,[p.year,bases])).rows
     const notes=(await db.query<{month:string;justification:string}>(
       `select to_char(month,'YYYY-MM') month,justification from comercial.monthly_justifications
-       where extract(year from month)=$1 and ($2='' or seller_key=$2)`,[p.year,seller])).rows
+       where extract(year from month)=$1 and seller_key=$2`,[p.year,seller])).rows
     const stateBy=new Map<string,{observed:string;data:Record<string,unknown>}>()
     for(const s of states){const old=stateBy.get(s.month);stateBy.set(s.month,{observed:old&&old.observed>s.observed_on?old.observed:s.observed_on,data:{...(old?.data||{}),...s.data}})}
     const noteBy=new Map(notes.map(n=>[n.month,n.justification]))
@@ -45,7 +45,7 @@ export async function annualSummary(current:Viewer,params:URLSearchParams):Promi
         justification:noteBy.get(month)||'',receipts:state?.data.receipts?sum('receipt'):null,debt:state?.data.debts?sum('debt'):null,
         contractIssues:state?.data.closing?(count('expired')??0)+(count('renewal_pending')??0):null}
     })
-    return {year:p.year,rows,sellers,seller,canEdit:current.role!=='seller'||Boolean(current.seller_key)}
+    return {year:p.year,rows,sellers,seller,canEdit:Boolean(seller)}
   })
 }
 export async function saveJustification(current:Viewer,body:unknown){
