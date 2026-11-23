@@ -96,6 +96,6 @@ end $$;
 
 do $$ declare cutoff date;begin
   select max(observed_on) into cutoff from comercial.source_loads;
-  if cutoff is not null then perform comercial.refresh_metrics(cutoff);end if;
+  if cutoff is not null then perform comercial.refresh_all(cutoff);end if;
 end $$;
 commit;
