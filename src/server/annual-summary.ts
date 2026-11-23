@@ -40,7 +40,7 @@ export async function annualSummary(current:Viewer,params:URLSearchParams):Promi
       return {month,label:new Intl.DateTimeFormat('pt-BR',{month:'long',timeZone:'UTC'}).format(new Date(`${month}-01T00:00:00Z`)),positionDate:state?.observed||null,
         portfolio:sum('mrr'),fuel:expenses.fuel,travel:expenses.travel,extras:expenses.extras,
         excess:hasExpenses?list.filter(m=>m.kind==='expense').reduce((a,b)=>a+b.excess,0):null,target:sum('target'),activations:sum('goal_sale'),
-        upgrades:sum('upgrade'),downgrades:sum('downgrade'),cancellations:sum('cancellation'),reversals:sum('reversal'),
+        upgrades:sum('upgrade'),downgrades:sum('downgrade'),cancellations:sum('cancellation_effective')??sum('cancellation'),reversals:sum('cancellation_reversed')??sum('reversal'),
         leads:state?.data.leads?count('lead_new'):null,visits:state?.data.visits?count('visit_task'):null,converted:state?.data.leads?count('lead_won'):null,
         justification:noteBy.get(month)||'',receipts:state?.data.receipts?sum('receipt'):null,debt:state?.data.debts?sum('debt'):null,
         contractIssues:state?.data.closing?(count('expired')??0)+(count('renewal_pending')??0):null}

@@ -70,7 +70,7 @@ export type AdminData = {
 }
 export type CorrectionIssue = { key:string; kind:string; base_code:BaseCode; month:string|null; row_key:string; label:string; reason:string; details:Record<string,unknown> }
 
-export const earliestMonth = '2026-10'
+export const earliestMonth = '2026-01'
 export const roles: Record<Role, string> = { admin: 'Administrador', manager: 'Gestor', seller: 'Vendedor' }
 export const sections = [
   { key: 'overview', label: 'Visão geral' },

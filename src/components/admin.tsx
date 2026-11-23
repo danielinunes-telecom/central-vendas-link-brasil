@@ -28,7 +28,7 @@ function CorrectionsPanel({onUpdated}:{onUpdated:()=>void}){
   async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;setBusy(true);setError('');setMessage('')
     const f=new FormData(e.currentTarget),value=selected.kind==='goal'?{seller:String(f.get('seller')),product:String(f.get('product')),total:Number(f.get('total')),note:String(f.get('note'))}
       :selected.kind==='contract_link'?{client:String(f.get('client')),note:String(f.get('note'))}
-      :{classification:String(f.get('classification')),note:String(f.get('note'))}
+      :{classification:String(f.get('classification')),contract:String(f.get('contract')),note:String(f.get('note'))}
     try{const r=await fetch('/api/admin/corrections',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:selected.kind,base:selected.base_code,row:selected.row_key,value})});if(!r.ok)throw new Error((await r.json()).error)
       setMessage('Correção salva e competências recalculadas.');setSelected(null);await read();onUpdated()
     }catch(e){setError(e instanceof Error?e.message:'Falha ao salvar a correção.')}finally{setBusy(false)}}
@@ -43,7 +43,7 @@ function CorrectionsPanel({onUpdated}:{onUpdated:()=>void}){
       {selected.kind==='goal'&&<><label>Vendedor<select name="seller" required>{data.sellers.map(s=><option key={s.seller_key} value={s.seller_key}>{s.name}</option>)}</select></label>
         <div className="form-pair"><label>Descrição do produto<input name="product" defaultValue={String(selected.details.original_description||'')} required/></label><label>Valor total do contrato<input name="total" type="number" min="0" step="0.01" defaultValue={String(selected.details.contract_total||'')} required/></label></div></>}
       {selected.kind==='contract_link'&&<label>ID do cliente correto<input name="client" required/></label>}
-      {selected.kind==='cancellation'&&<label>Classificação<select name="classification"><option value="request">Solicitação</option><option value="effective">Cancelamento efetivado</option><option value="reversed">Reversão confirmada</option><option value="pending">Manter pendente</option></select></label>}
+      {selected.kind==='cancellation'&&<><label>ID do contrato correto<input name="contract" defaultValue={String(selected.details.contract||'')} placeholder="Obrigatório quando houver mais de um contrato"/></label><label>Classificação<select name="classification"><option value="request">Somente solicitação</option><option value="effective">Cancelamento efetivado</option><option value="reversed">Reversão confirmada</option><option value="pending">Manter pendente</option></select></label></>}
       <label>Justificativa da correção<input name="note" minLength={4} required/></label><div className="form-pair"><button type="submit" className="primary" disabled={busy}>Salvar e recalcular</button><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button></div>
     </form></Card>}
     {!!imports.length&&<Card title="Avisos dos arquivos" description="Erros estruturais exigem correção no arquivo e novo envio."><div className="simple-rows">{imports.map(i=><div key={i.key}><AlertTriangle size={16}/><span>{i.label}<small>{i.reason}</small></span><strong>{baseNames[i.base_code]}</strong></div>)}</div></Card>}
@@ -112,7 +112,7 @@ function ImportPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
       <Card title="Importar relatórios" description="Use as exportações originais do IXC, CRM e Life Tracker.">
         <div className="import-body">
           <div className="import-actions"><label>Data da extração <input type="date" aria-label="Data da extração" value={observed}
-            max={today} min="2026-10-01" disabled={sending} onChange={e=>setObserved(e.target.value)}/></label>
+            max={today} min="2026-01-01" disabled={sending} onChange={e=>setObserved(e.target.value)}/></label>
             <label>Base de origem <select value={base} onChange={e=>setBase(e.target.value)} disabled={sending}>
               <option value="">Selecione a base</option><option value="old">{baseNames.old}</option><option value="new">{baseNames.new}</option>
             </select></label></div>
@@ -198,7 +198,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     <div className="content-grid equal-grid">
       <Card title="Metas por vendedor" description="As alterações valem a partir da competência selecionada.">
         <form className="settings-form" onSubmit={e=>save(e,'target',f=>({seller:f.get('seller'),month:String(f.get('month'))+'-01',amount:Number(f.get('amount'))}))}>
-          <label>Vendedor<select name="seller" required>{sellers}</select></label><div className="form-pair"><label>Competência<input type="month" name="month" min="2026-10" defaultValue={month} required/></label>
+          <label>Vendedor<select name="seller" required>{sellers}</select></label><div className="form-pair"><label>Competência<input type="month" name="month" min="2026-01" defaultValue={month} required/></label>
           <label>Meta em reais<input name="amount" type="number" min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
         </form>
       </Card>

@@ -13,7 +13,7 @@ import { HttpError } from './http'
 export const maxFileBytes = 25 * 1024 * 1024
 export const maxBatchBytes = 100 * 1024 * 1024
 const extension = /^\.(xlsx|xls|pdf)$/i
-export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/).refine(v=>v>='2026-10-01')
+export const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/).refine(v=>v>='2026-01-01')
 const text = z.string().trim().min(1).max(160)
 const entry = z.object({ product:text,total:z.number().nonnegative().max(999_999_999) })
 const jsonMap = z.record(z.string().min(1).max(180),text).refine(o=>Object.keys(o).length<=10000)
@@ -90,7 +90,7 @@ export async function submitFiles(current:Viewer,form:FormData) {
   const observed=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(form.get('observed')||localDay())
   const parsed=new Date(observed+'T12:00:00Z')
   if (!Number.isFinite(parsed.valueOf()) || parsed.toISOString().slice(0,10)!==observed ||
-      observed>'9999-12-31' || observed<'2026-10-01' || observed>localDay()) {
+      observed>'9999-12-31' || observed<'2026-01-01' || observed>localDay()) {
     throw new HttpError(400,'Informe uma data de extração válida.')
   }
   const group=randomUUID(), local=demoMode()?process.env.IMPORT_LOCAL_PATH:undefined

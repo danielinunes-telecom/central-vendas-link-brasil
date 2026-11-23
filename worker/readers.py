@@ -99,24 +99,36 @@ def read_alterations_pdf(document):
         if count:
             total = int(count.group(1).replace(".", ""))
         if not window:
-            found = re.search(r"De:\s*(\d{2}/\d{2}/\d{4})\s+At[eé]:\s*(\d{2}/\d{2}/\d{4})", page_text, re.I)
+            found = re.search(r"De:\s*(\d{2}/\d{2}/\d{4})(?:\s+At[eé]:\s*(\d{2}/\d{2}/\d{4}))?", page_text, re.I)
             window = found.groups() if found else None
         by_line = defaultdict(list)
-        for word in page.extract_words(x_tolerance=1, y_tolerance=1):
+        page_words = page.extract_words(x_tolerance=1, y_tolerance=1)
+        for word in page_words:
             by_line[round(word["top"], 1)].append(word)
+        header = next((line for line in by_line.values()
+            if {"CONTRATO", "DATA", "TIPO", "VENDEDOR", "DIFERENCA"} <= {norm(w["text"]) for w in line}), None)
+        if header is None:
+            continue
+        anchors = []
+        for label in ("CONTRATO", "DATA", "TIPO", "VENDEDOR", "VALOR", "DIFERENCA", "PLANO", "COBRANCA"):
+            anchors.extend(w["x0"] for w in header if norm(w["text"]) == label)
+        anchors = sorted(anchors)
+        # Contrato, data, tipo, vendedor, dois valores, diferença, dois planos e duas cobranças.
+        if len(anchors) != 11:
+            continue
+        # IXC aligns data inside the header bands (and shrinks long names).  The
+        # offsets below follow the actual left edges of those bands, not the
+        # midpoint between header labels, so a long seller/plan is not cut.
+        offsets = (-12,-3,-16,-12,-6,-6,-5,-22,-26,-13)
+        bounds = [a+offset for a,offset in zip(anchors[:10],offsets)] + [page.width]
         for _, line in sorted(by_line.items()):
-            def words(a, b):
-                return " ".join(word["text"] for word in line if a <= word["x0"] < b)
-            contract = words(15, 83)
-            date_word = next((word for word in line if re.fullmatch(r"\d{2}/\d{2}/\d{4}", word["text"])), None)
-            if re.fullmatch(r"\d+", contract) and date_word is not None:
-                # Some IXC layouts place "Alteração" immediately beside the date.
-                # Parse the date token itself instead of the whole horizontal band.
-                event_date = date_word["text"]
-                result.append((contract, event_date,
-                    " ".join(word["text"] for word in line if word["x0"] >= date_word["x1"] and word["x0"] < 215),
-                    words(215, 266), words(266, 328), words(328, 397),
-                    words(397, 440), words(440, 540), words(540, 640)))
+            fields = [" ".join(word["text"] for word in line if lo <= word["x0"] < hi)
+                      for lo,hi in zip(bounds,bounds[1:])]
+            if re.fullmatch(r"\d+", fields[0]) and day(fields[1]):
+                result.append(tuple(fields[:9]))
+    if window and window[1] is None and result:
+        latest = max(day(row[1]) for row in result if day(row[1]))
+        window = (window[0], latest)
     if not recognized or not window or (total is not None and len(result) != total):
         raise ReportError("Não foi possível conferir a estrutura do PDF de alterações do IXC.")
     return as_table(headers, enumerate(result, 1), window)

@@ -6,7 +6,7 @@ import { brl, dateLabel, pct, qty, ratio } from '@/lib/format'
 import { BandwidthCard, BaseCard, Card, Empty, ExpensesCard, GoalsChart, goalTotal, Kpi, line, MovementList, OverviewKpis, SeriesChart, TextAction, VisitsCard, type Inspect } from './indicators'
 
 export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;inspect:Inspect;onSeller:(id:string)=>void;onSales:()=>void}) {
-  const cancellationOrders=line(data,'cancellation_request').count+line(data,'cancellation_effective').count+line(data,'cancellation_reversed').count+line(data,'cancellation_pending').count
+  const cancellationOrders=line(data,'cancellation_request').count
   const decisions=line(data,'cancellation_effective').count+line(data,'cancellation_reversed').count
   return <>
     <OverviewKpis data={data} inspect={inspect}/>

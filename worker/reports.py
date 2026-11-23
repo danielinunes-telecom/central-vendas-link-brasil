@@ -70,7 +70,28 @@ def contract(row):
     ) | dates(row, activated="DATA ATIVACAO", cancelled="DATA CANCELAMENTO",
               expires="DATA DE EXPIRACAO", signed="DATA PRIMEIRA ASSINATURA") | {
         "client_key": ident(first(row,"ID CLIENTE","ID DO CLIENTE","CODIGO CLIENTE","CODIGO DO CLIENTE")),
+        "total": decimal(first(row,"VALOR CONTRATO","VALOR TOTAL CONTRATO")),
         "signed_state": text(first(row,"STATUS ASSINATURA","ASSINADO")) or None,
+    }
+
+
+def contract_history(row):
+    """Full IXC customer/contract position, including inactive contracts and mojibake headers."""
+    return {
+        "contract_key": ident(row.get("ID CONTRATO")), "client_key": ident(row.get("ID CLIENTE")),
+        "client": text(row.get("RAZAO SOCIAL/NOME")) or None,
+        "description": text(row.get("PLANO DE VENDA")) or None,
+        "total": decimal(row.get("VALOR CONTRATO")),
+        "status": text(row.get("STATUS CONTRATO")) or None,
+        "access": text(row.get("STATUS ACESSO")) or None,
+        "seller_id": ident(row.get("VENDEDOR")), "seller": text(row.get("VENDEDOR 2")) or None,
+        "city": text(row.get("CIDADE")) or None,
+        "activated": day(first(row,"DATA ATIVACAO","DATA ATIVAAAO")),
+        "renewal": day(first(row,"DATA RENOVACAO","DATA RENOVAAAO")),
+        "expires": day(first(row,"DATA DE EXPIRACAO","DATA DE EXPIRAAAO")),
+        "cancelled": day(row.get("DATA DO CANCELAMENTO")),
+        "cancellation_reason": text(row.get("MOTIVO")) or None,
+        "cancellation_description": text(first(row,"DESCRICAO DO CANCELAMENTO","DESCRIAAO DO CANCELAMENTO")) or None,
     }
 
 
@@ -172,11 +193,11 @@ def item(row):
 def cancellation_order(row):
     original = text(first(row, "DESCRICAO", "MENSAGEM", "OBSERVACAO", "RELATO", "SOLUCAO")) or None
     subject = text(first(row, "ASSUNTO", "TIPO", "SETOR")) or None
-    status = text(first(row, "STATUS", "STATUS OS", "SITUACAO")) or None
+    status = text(first(row, "NOVO STATUS", "STATUS", "STATUS OS", "SITUACAO")) or None
     evidence = norm(" ".join(v for v in (subject, original) if v))
     reversal_terms = ("DESISTIU DO CANCELAMENTO", "CANCELAMENTO REVERTIDO", "REVERSAO CONFIRMADA", "PERMANECEU ATIVO", "MANTEVE O CONTRATO")
     effective_terms = ("CANCELAMENTO EFETIVADO", "CONTRATO CANCELADO", "SERVICO CANCELADO", "CANCELAMENTO CONCLUIDO")
-    request_terms = ("SOLICITACAO DE CANCELAMENTO", "PEDIDO DE CANCELAMENTO", "SOLICITOU CANCELAMENTO")
+    request_terms = ("SOLICITACAO DE CANCELAMENTO", "PEDIDO DE CANCELAMENTO", "SOLICITOU CANCELAMENTO", "CANCELAMENTO DE CONTRATO")
     if any(term in evidence for term in reversal_terms):
         classification, matched, review = "reversed", next(term for term in reversal_terms if term in evidence), False
     elif any(term in evidence for term in effective_terms):
@@ -186,8 +207,10 @@ def cancellation_order(row):
     else:
         classification, matched, review = "pending", None, True
     return keys(row, order_key="ID", contract_key="ID CONTRATO", client_key="ID CLIENTE") | labels(
-        row, client="CLIENTE", attendant="COLABORADOR", portfolio_seller="VENDEDOR", reason="MOTIVO CANCELAMENTO"
-    ) | {"opened": day(first(row,"DATA ABERTURA","DATA","DATA INICIO")), "closed": day(first(row,"DATA FECHAMENTO","DATA FINALIZACAO")),
+        row, client="CLIENTE", reason="MOTIVO CANCELAMENTO"
+    ) | {"attendant": text(first(row,"USUARIO","COLABORADOR")) or None,
+         "opening_responsible": text(row.get("RESPONSAVEL")) or None,
+         "opened": day(first(row,"CRIADO EM","DATA ABERTURA","DATA","DATA INICIO")), "closed": day(first(row,"ULTIMA ALTERACAO","DATA FECHAMENTO","DATA FINALIZACAO")),
          "value": decimal(first(row,"VALOR","VALOR CONTRATO"))} | {
         "subject": subject, "status": status, "original_text": original, "classification": classification,
         "evidence": matched, "needs_review": review,
@@ -196,6 +219,7 @@ def cancellation_order(row):
 
 # (name, signature columns, key, event date, load strategy, transform)
 SCHEMAS = (
+    ("cancellation_orders", {"ID","CLIENTE","ASSUNTO","CRIADO EM","NOVO STATUS","DESCRICAO"}, "order_key", "opened", "merge", cancellation_order),
     ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","DESCRICAO"}, "order_key", "opened", "merge", cancellation_order),
     ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","MENSAGEM"}, "order_key", "opened", "merge", cancellation_order),
     ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","OBSERVACAO"}, "order_key", "opened", "merge", cancellation_order),
@@ -204,6 +228,7 @@ SCHEMAS = (
     ("seller_directory", {"ID USUARIO","NOME","ID VENDEDOR","ID COLABORADOR"}, "user_key", None, "snapshot", seller_directory),
     ("customers", {"ID","RAZAO SOCIAL","CNPJ/CPF","RESPONSAVEL","DATA CADASTRO"}, "customer_key", None, "snapshot", customer),
     ("contract_details", {"ID CLIENTE","ID CONTRATO","ATIVACAO","RENOVACAO","VALOR TOTAL CONTRATO"}, "contract_key", None, "snapshot", contract_details),
+    ("contracts", {"ID CONTRATO","ID CLIENTE","STATUS CONTRATO","PLANO DE VENDA","VALOR CONTRATO","VENDEDOR 2"}, "contract_key", None, "snapshot", contract_history),
     ("contract_links", {"ID CLIENTE","ID CONTRATO"}, "contract_key", None, "snapshot", contract_link),
     ("contracts", {"ID","STATUS CONTRATO","DATA ATIVACAO","PLANO DE VENDA"}, "contract_key", None, "snapshot", contract),
     ("items", {"ID CONTRATO","PRODUTO","VALOR ITEM","TIPO DE COBRANCA"}, "item_key", None, "snapshot", item),
