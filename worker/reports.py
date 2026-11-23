@@ -163,8 +163,36 @@ def item(row):
     ) | amounts(row, total="VALOR ITEM")
 
 
+def cancellation_order(row):
+    original = text(first(row, "DESCRICAO", "MENSAGEM", "OBSERVACAO", "RELATO", "SOLUCAO")) or None
+    subject = text(first(row, "ASSUNTO", "TIPO", "SETOR")) or None
+    status = text(first(row, "STATUS", "STATUS OS", "SITUACAO")) or None
+    evidence = norm(" ".join(v for v in (subject, original) if v))
+    reversal_terms = ("DESISTIU DO CANCELAMENTO", "CANCELAMENTO REVERTIDO", "REVERSAO CONFIRMADA", "PERMANECEU ATIVO", "MANTEVE O CONTRATO")
+    effective_terms = ("CANCELAMENTO EFETIVADO", "CONTRATO CANCELADO", "SERVICO CANCELADO", "CANCELAMENTO CONCLUIDO")
+    request_terms = ("SOLICITACAO DE CANCELAMENTO", "PEDIDO DE CANCELAMENTO", "SOLICITOU CANCELAMENTO")
+    if any(term in evidence for term in reversal_terms):
+        classification, matched, review = "reversed", next(term for term in reversal_terms if term in evidence), False
+    elif any(term in evidence for term in effective_terms):
+        classification, matched, review = "effective", next(term for term in effective_terms if term in evidence), False
+    elif any(term in evidence for term in request_terms):
+        classification, matched, review = "request", next(term for term in request_terms if term in evidence), False
+    else:
+        classification, matched, review = "pending", None, True
+    return keys(row, order_key="ID", contract_key="ID CONTRATO", client_key="ID CLIENTE") | labels(
+        row, client="CLIENTE", attendant="COLABORADOR", portfolio_seller="VENDEDOR", reason="MOTIVO CANCELAMENTO"
+    ) | {"opened": day(first(row,"DATA ABERTURA","DATA","DATA INICIO")), "closed": day(first(row,"DATA FECHAMENTO","DATA FINALIZACAO")),
+         "value": decimal(first(row,"VALOR","VALOR CONTRATO"))} | {
+        "subject": subject, "status": status, "original_text": original, "classification": classification,
+        "evidence": matched, "needs_review": review,
+    }
+
+
 # (name, signature columns, key, event date, load strategy, transform)
 SCHEMAS = (
+    ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","DESCRICAO"}, "order_key", "opened", "merge", cancellation_order),
+    ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","MENSAGEM"}, "order_key", "opened", "merge", cancellation_order),
+    ("cancellation_orders", {"ID","ASSUNTO","STATUS","CLIENTE","ID CONTRATO","OBSERVACAO"}, "order_key", "opened", "merge", cancellation_order),
     ("contract_values", {"ID CLIENTE","PLANO RELATORIO","VALOR MENSAL RELATORIO","VENDEDOR","TAXA INSTALACAO"},
      None, None, "snapshot", contract_values),
     ("seller_directory", {"ID USUARIO","NOME","ID VENDEDOR","ID COLABORADOR"}, "user_key", None, "snapshot", seller_directory),

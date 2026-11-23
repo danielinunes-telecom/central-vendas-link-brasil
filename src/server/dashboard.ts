@@ -16,12 +16,13 @@ const raw = z.object({
   branch: z.string().max(150).optional(),
   city: z.string().max(150).optional(),
   product: z.string().max(100).optional(),
+  period: z.enum(['monthly','quarterly','semiannual']).optional(),
 })
 export function filtersFrom(params: URLSearchParams, current: Viewer): Filters {
   const v = raw.parse(Object.fromEntries(params))
   const now = localDay().slice(0,7)
   const month = v.month && v.month>=earliestMonth && v.month<=now ? v.month : now
-  return { month,base:v.base||'',seller:current.seller_key || v.seller || '',branch:v.branch || '',city:v.city || '',product:v.product || '' }
+  return { month,period:v.period||'monthly',base:v.base||'',seller:current.seller_key || v.seller || '',branch:v.branch || '',city:v.city || '',product:v.product || '' }
 }
 const scope = (f: Filters, bases: BaseCode[]) => [f.month+'-01',f.seller,f.branch,f.city,f.product,bases]
 const identity = "coalesce(details->>'identity',base_code||':'||(details->>'client'))"
@@ -90,7 +91,7 @@ async function aggregate(db: PoolClient, f: Filters, bases:BaseCode[]) {
     "occurred_on::text as day from b where last_row=1 order by peak desc limit 300", filters)).rows
   return {summary,goals,daily,expenses,pipeline,countBase,trend,circuits}
 }
-export async function dashboard(current: Viewer, filters: Filters): Promise<DashboardData> {
+async function dashboardMonthly(current: Viewer, filters: Filters): Promise<DashboardData> {
   return asUser(current.email, async db => {
     const {states,bases}=await positions(db,filters)
     const selected=states.filter(row=>bases.includes(row.base_code))
@@ -132,13 +133,50 @@ export async function dashboard(current: Viewer, filters: Filters): Promise<Dash
     }
   })
 }
-export async function detail(current: Viewer, filters: Filters, params: URLSearchParams) {
+function periodMonths(filters:Filters){
+  const [year,month]=filters.month.split('-').map(Number)
+  const size=filters.period==='quarterly'?3:filters.period==='semiannual'?6:1
+  const block=Math.floor((month-1)/size)*size+1
+  return Array.from({length:size},(_,i)=>`${year}-${String(block+i).padStart(2,'0')}`)
+}
+export async function dashboard(current:Viewer,filters:Filters):Promise<DashboardData>{
+  const months=periodMonths(filters)
+  if(months.length===1)return dashboardMonthly(current,{...filters,period:'monthly'})
+  const all=await Promise.all(months.map(month=>dashboardMonthly(current,{...filters,month,period:'monthly'})))
+  const last=all.at(-1)!, first=all[0]
+  const positional=new Set(['active_contract','active_client','mrr','debt','expired','renewal_pending','unsigned','visit_coverage','visit_overdue','contract_values'])
+  const lineKinds=new Set(all.flatMap(d=>d.lines.map(l=>l.kind)))
+  last.lines=Array.from(lineKinds,k=>{
+    const values=all.map(d=>d.lines.find(l=>l.kind===k)).filter(Boolean) as Line[]
+    if(positional.has(k))return values.at(-1)??{kind:k,count:0,amount:0,coverage:0,excess:0,missing:0}
+    return values.reduce<Line>((out,v)=>({kind:k,count:out.count+v.count,amount:out.amount+v.amount,coverage:out.coverage+v.coverage,excess:out.excess+v.excess,missing:out.missing+v.missing}),{kind:k,count:0,amount:0,coverage:0,excess:0,missing:0})
+  })
+  const goals=new Map<string,Goal>()
+  for(const d of all)for(const g of d.goals){const old=goals.get(g.seller_key);goals.set(g.seller_key,old?{...g,target:old.target+g.target,actual:old.actual+g.actual,pending:old.pending+g.pending}:{...g})}
+  last.goals=Array.from(goals.values()).sort((a,b)=>b.actual-a.actual)
+  last.daily=all.flatMap(d=>d.daily)
+  const categories=(key:'expenses'|'pipeline')=>{const map=new Map<string,Category>();for(const d of all)for(const row of d[key]){const old=map.get(row.name);map.set(row.name,{name:row.name,amount:(old?.amount||0)+row.amount,count:(old?.count||0)+row.count})}return Array.from(map.values())}
+  last.expenses=categories('expenses');last.pipeline=categories('pipeline')
+  last.base={clients:{start:first.base.clients.start,end:last.base.clients.end,entries:all.reduce((n,d)=>n+(d.base.clients.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.clients.exits||0),0)},
+    contracts:{start:first.base.contracts.start,end:last.base.contracts.end,entries:all.reduce((n,d)=>n+(d.base.contracts.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.contracts.exits||0),0)},
+    mrr:{start:first.base.mrr.start,end:last.base.mrr.end,entries:all.reduce((n,d)=>n+(d.base.mrr.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.mrr.exits||0),0)},unresolved:last.base.unresolved}
+  last.filters=filters;last.observed=last.observed;last.state={...first.state,...last.state}
+  return last
+}
+type DetailResult={rows:Metric[];total:number;page:number;size:number}
+export async function detail(current: Viewer, filters: Filters, params: URLSearchParams):Promise<DetailResult> {
   const kind = z.string().refine(v=>Object.hasOwn(metricNames,v),'Indicador inválido.').parse(params.get('kind'))
   const page = z.coerce.number().int().min(1).max(10000).catch(1).parse(params.get('page')||1)
   const search = z.string().max(160).catch('').parse(params.get('q')||'')
   const status = z.enum(['all','visited','pending']).catch('all').parse(params.get('status')||'all')
   const csv = params.get('format')==='csv'
   const size = csv ? 10000 : 20
+  if(filters.period!=='monthly'){
+    const query=new URLSearchParams(params);query.set('format','csv');query.set('page','1')
+    const results:DetailResult[]=await Promise.all(periodMonths(filters).map(month=>detail(current,{...filters,month,period:'monthly'},query)))
+    const rows:Metric[]=results.flatMap(result=>result.rows).sort((a,b)=>(b.occurred_on||'').localeCompare(a.occurred_on||''))
+    return {rows:csv?rows:rows.slice((page-1)*size,page*size),total:rows.length,page,size}
+  }
   return asUser(current.email, async db => {
     const {bases}=await positions(db,filters)
     const actualKind=kind==='active_client'?'active_contract':kind

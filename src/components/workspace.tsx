@@ -1,19 +1,21 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, BriefcaseBusiness, CalendarDays, ChevronDown, CircleUserRound, Filter, LayoutDashboard, LogOut, MapPinned, Menu, ReceiptText, RefreshCw, Settings2, Target, X, type LucideIcon } from 'lucide-react'
+import { Activity, BriefcaseBusiness, CalendarDays, ChevronDown, CircleUserRound, Eye, EyeOff, Filter, LayoutDashboard, LogOut, MapPinned, Menu, ReceiptText, RefreshCw, Settings2, TableProperties, Target, X, type LucideIcon } from 'lucide-react'
 import { baseNames, earliestMonth, roles, sections, type DashboardData, type Filters, type Section } from '@/lib/model'
 import { dateLabel, monthLabel } from '@/lib/format'
 import { Administration } from './admin'
 import { Records, type DetailRequest } from './records'
 import { Crm, Expenses, Overview, Portfolio, Sales } from './views'
+import { AnnualSummary } from './annual-summary'
 
-const icons:Record<Section,LucideIcon>={overview:LayoutDashboard,portfolio:BriefcaseBusiness,sales:Target,crm:MapPinned,expenses:ReceiptText,admin:Settings2}
+const icons:Record<Section,LucideIcon>={overview:LayoutDashboard,portfolio:BriefcaseBusiness,sales:Target,crm:MapPinned,expenses:ReceiptText,annual:TableProperties,admin:Settings2}
 const headings:Record<Section,[string,string]>={
   overview:['Visão geral','Acompanhe a carteira, as metas e a operação comercial.'],
   portfolio:['Carteira','Consulte a base ativa, as movimentações e a saúde da carteira.'],
   sales:['Vendas e metas','Acompanhe o atingimento pela data de ativação do contrato.'],
   crm:['Leads e visitas','Monitore a prospecção, as conversões e a cobertura da carteira.'],
   expenses:['Despesas em campo','Acompanhe os gastos de viagem e os limites da operação.'],
+  annual:['Resumo anual','Consulte os resultados mensais e acumulados do vendedor.'],
   admin:['Administração','Importe os relatórios e configure as regras do painel.'],
 }
 const toQuery=(f:Filters)=>new URLSearchParams(Object.entries(f).filter(([,v])=>v))
@@ -37,9 +39,12 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
   const [drawer,setDrawer]=useState(false),[more,setMore]=useState(false),[loading,setLoading]=useState(false)
   const [request,setRequest]=useState<DetailRequest|null>(null),[error,setError]=useState('')
   const [profileMenu,setProfileMenu]=useState(false)
+  const [financialVisible,setFinancialVisible]=useState(false)
   const current=initial.viewer, today=initial.today
   const showSeller=current.role!=='seller'
   const update=useCallback(()=>setRevision(n=>n+1),[])
+  useEffect(()=>{setFinancialVisible(localStorage.getItem('lb:financial-visible:'+current.email)==='true')},[current.email])
+  function toggleFinancial(){setFinancialVisible(v=>{localStorage.setItem('lb:financial-visible:'+current.email,String(!v));return !v})}
   useEffect(()=>{
     const q=toQuery(filters)
     if(view!=='overview')q.set('section',view)
@@ -101,6 +106,7 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
       <div className="main-content">
         <div className="page-title"><div><h1>{heading}</h1><p>{subheading}</p></div></div>
         {view!=='admin'&&<div className="filter-bar" aria-label="Filtros do painel">
+          <label className="filter-control"><span>Período</span><select aria-label="Tipo de período" value={filters.period} onChange={e=>choose('period',e.target.value)}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="semiannual">Semestral</option></select></label>
           <label className="filter-control"><CalendarDays size={15}/><span>Competência</span>
             <select aria-label="Competência" value={filters.month} onChange={e=>choose('month',e.target.value)}>
               {monthsTo(today).map(m=><option value={m} key={m}>{monthLabel(m)}</option>)}</select></label>
@@ -114,6 +120,7 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
             <Filter size={15}/> Filtros {extras>0&&<span>{extras}</span>}</button>}
           {(filters.seller&&showSeller||!!filters.base||extras>0)&&<button className="clear-filter" onClick={()=>setFilters(f=>({...f,seller:current.seller_key||'',base:'',branch:'',city:'',product:''}))}><X size={15}/>Limpar filtros</button>}
           {loading&&<span className="filter-status" role="status">Atualizando…</span>}
+          <button className="secondary" onClick={toggleFinancial}>{financialVisible?<EyeOff size={15}/>:<Eye size={15}/>} {financialVisible?'Ocultar valores':'Exibir valores'}</button>
           {more&&<div className="more-filters">
             {([['branch','Filial','branches'],['city','Cidade','cities'],['product','Produto','products']] as const).map(([key,label,options])=>
               <label key={key}>{label}<select value={filters[key]} onChange={e=>choose(key,e.target.value)}>
@@ -132,16 +139,17 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
         {error&&<div className="notice error" role="alert">{error}</div>}
         <div className={'page-sections '+(loading?'loading':'')} aria-busy={loading}>
           {view==='overview'&&<Overview data={data} inspect={inspect} onSeller={sellerFilter} onSales={()=>navigate('sales')}/>}
-          {view==='portfolio'&&<Portfolio data={data} inspect={inspect}/>}
+          {view==='portfolio'&&<Portfolio data={data} inspect={inspect} financialVisible={financialVisible}/>}
           {view==='sales'&&<Sales data={data} inspect={inspect} onSeller={sellerFilter}/>}
           {view==='crm'&&<Crm data={data} inspect={inspect}/>}
           {view==='expenses'&&<Expenses data={data} inspect={inspect}/>}
+          {view==='annual'&&<AnnualSummary dashboard={data} inspect={inspect} financialVisible={financialVisible}/>}
           {view==='admin'&&admin&&<Administration today={today} onUpdated={update}/>}
         </div>
         <footer className="workspace-footer"><Activity size={14}/><span>Link Brasil · Central de Vendas</span>{data.demo&&<span>Dados fictícios</span>}</footer>
       </div>
     </main>
-    {request&&<Records request={request} filters={filters} onClose={()=>setRequest(null)}/>}
+    {request&&<Records request={request} filters={filters} financialVisible={financialVisible} onClose={()=>setRequest(null)}/>}
   </div>
 }
 

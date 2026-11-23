@@ -3,7 +3,8 @@ export type Viewer = { email: string; name: string; role: Role; seller_key: stri
 export type Seller = { seller_key: string; name: string; team: string; active: boolean }
 export const baseNames = {old:'Base Velha',new:'Base Nova',legacy:'Histórico sem base'} as const
 export type BaseCode = keyof typeof baseNames
-export type Filters = { base: string; month: string; seller: string; branch: string; city: string; product: string }
+export type PeriodMode = 'monthly'|'quarterly'|'semiannual'
+export type Filters = { base: string; month: string; period: PeriodMode; seller: string; branch: string; city: string; product: string }
 export type Metric = {
   kind: string; row_key: string; base_code: BaseCode; seller_key: string | null; seller: string | null
   occurred_on: string | null; label: string; amount: number | null
@@ -41,6 +42,14 @@ export type DashboardData = {
   today: string
   basePositions: {code:BaseCode; observed:string; contracts:boolean; debts:boolean; expenses:boolean}[]
 }
+export type AnnualSummaryRow = {
+  month:string; label:string; positionDate:string|null
+  portfolio:number|null; fuel:number|null; travel:number|null; extras:number|null; excess:number|null
+  target:number|null; activations:number|null; upgrades:number|null; downgrades:number|null
+  cancellations:number|null; reversals:number|null; leads:number|null; visits:number|null; converted:number|null
+  justification:string; receipts:number|null; debt:number|null; contractIssues:number|null
+}
+export type AnnualSummaryData = { year:number; rows:AnnualSummaryRow[]; sellers:Seller[]; seller:string; canEdit:boolean }
 export type ImportFile = {
   id: string; name: string; source: string | null; status: string
   rows_read: number; rows_applied: number; issues: { line: number; message: string }[]; error: string | null
@@ -67,6 +76,7 @@ export const sections = [
   { key: 'sales', label: 'Vendas e metas' },
   { key: 'crm', label: 'Leads e visitas' },
   { key: 'expenses', label: 'Despesas' },
+  { key: 'annual', label: 'Resumo anual' },
   { key: 'admin', label: 'Administração' },
 ] as const
 export type Section = typeof sections[number]['key']
@@ -75,6 +85,7 @@ export const sourceNames: Record<string, string> = {
   titles: 'Títulos', open_titles: 'Títulos em aberto', payments: 'Recebimentos',
   debts: 'Inadimplência', leads: 'Leads', activities: 'Atividades e visitas',
   negotiations: 'Negociações', changes: 'Alterações de contrato', expenses: 'Life Tracker',
+  cancellation_orders: 'Ordens de serviço de cancelamento',
   items: 'Itens do contrato', band: 'Uso de banda', seller_directory: 'Cadastro de vendedores (IXC)',
 }
 export const metricNames: Record<string,string> = {
@@ -87,5 +98,8 @@ export const metricNames: Record<string,string> = {
   lead_won:'Leads efetivados', negotiation:'Negociações', prospect_visit:'Visitas de prospecção',
   visit_coverage:'Visitas à carteira', visit_task:'Tarefas de visita concluídas',
   visit_overdue:'Clientes com 60 dias sem visita', opening_mrr:'Receita recorrente na abertura', expense:'Despesas em campo',
+  renewal_pending:'Contratos pendentes de renovação', cancellation_request:'Solicitações de cancelamento',
+  cancellation_effective:'Cancelamentos confirmados por atendimento', cancellation_reversed:'Reversões confirmadas por atendimento',
+  cancellation_pending:'Atendimentos de cancelamento para revisão',
 }
 

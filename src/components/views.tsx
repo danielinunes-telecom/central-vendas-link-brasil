@@ -6,8 +6,21 @@ import { brl, dateLabel, pct, qty, ratio } from '@/lib/format'
 import { BandwidthCard, BaseCard, Card, Empty, ExpensesCard, GoalsChart, goalTotal, Kpi, line, MovementList, OverviewKpis, SeriesChart, TextAction, VisitsCard, type Inspect } from './indicators'
 
 export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;inspect:Inspect;onSeller:(id:string)=>void;onSales:()=>void}) {
+  const cancellationOrders=line(data,'cancellation_request').count+line(data,'cancellation_effective').count+line(data,'cancellation_reversed').count+line(data,'cancellation_pending').count
+  const decisions=line(data,'cancellation_effective').count+line(data,'cancellation_reversed').count
   return <>
     <OverviewKpis data={data} inspect={inspect}/>
+    <div className="content-grid equal-grid">
+      <Card title="Renovações da carteira" description="Vencimento contratual; não confundir com vencimento de fatura"><div className="simple-rows">
+        <button onClick={()=>inspect('expired')}><FileClock size={17}/><span>Contratos vencidos</span><strong>{qty(line(data,'expired').count)}</strong></button>
+        <button onClick={()=>inspect('renewal_pending')}><FileClock size={17}/><span>Vencem nos próximos 60 dias</span><strong>{qty(line(data,'renewal_pending').count)}</strong></button>
+      </div></Card>
+      <Card title="Atendimentos de cancelamento" description="Contratos e atendimentos são contados separadamente"><div className="simple-rows">
+        <button onClick={()=>inspect('cancellation_request')}><FileClock size={17}/><span>Solicitações identificadas</span><strong>{qty(line(data,'cancellation_request').count)}</strong></button>
+        <button onClick={()=>inspect('cancellation_reversed')}><CircleCheck size={17}/><span>Reversões confirmadas</span><strong>{qty(line(data,'cancellation_reversed').count)}</strong></button>
+        <button onClick={()=>inspect('cancellation_pending')}><FileBadge size={17}/><span>Pendentes de revisão</span><strong>{qty(line(data,'cancellation_pending').count)}</strong></button>
+      </div><div className="card-foot">{cancellationOrders?`Taxa de reversão: ${pct(ratio(line(data,'cancellation_reversed').count,decisions))} das decisões confirmadas`:'Aguardando importação das ordens de serviço'}</div></Card>
+    </div>
     <div className="content-grid main-grid">
       <GoalsChart goals={data.goals} onSeller={onSeller} onDetails={onSales}/>
       <VisitsCard data={data} inspect={inspect}/>
@@ -19,7 +32,7 @@ export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;ins
   </>
 }
 
-export function Portfolio({data,inspect}:{data:DashboardData;inspect:Inspect}) {
+export function Portfolio({data,inspect,financialVisible}:{data:DashboardData;inspect:Inspect;financialVisible:boolean}) {
   const [tab,setTab]=useState<'base'|'finance'|'band'>('base')
   const {base}=data
   const reported=line(data,'contract_values')
@@ -27,8 +40,8 @@ export function Portfolio({data,inspect}:{data:DashboardData;inspect:Inspect}) {
     <div className="kpis">
       <Kpi label="Clientes ativos" value={qty(base.clients.end)} description={qty(base.unresolved)+' contratos com vínculo pendente'} icon={Users} onClick={()=>inspect('active_client')}/>
       <Kpi label="Contratos ativos" value={qty(base.contracts.end)} description="Inclui bloqueados e suspensos ativos" icon={BriefcaseBusiness} tone="teal" onClick={()=>inspect('active_contract')}/>
-      <Kpi label="Receita mensal recorrente" value={brl(base.mrr.end)} description={qty(line(data,'mrr').count)+' de '+qty(base.contracts.end)+' contratos · estimativa'} icon={Banknote} tone="violet" onClick={()=>inspect('mrr')}/>
-      <Kpi label="Inadimplência de 60 dias" value={data.state.debts?brl(line(data,'debt').amount):'—'} description={data.state.debts?
+      <Kpi label="Receita mensal recorrente" value={financialVisible?brl(base.mrr.end):'R$ ••••••'} description={qty(line(data,'mrr').count)+' de '+qty(base.contracts.end)+' contratos · estimativa'} icon={Banknote} tone="violet" onClick={()=>inspect('mrr')}/>
+      <Kpi label="Inadimplência de 60 dias" value={data.state.debts?(financialVisible?brl(line(data,'debt').amount):'R$ ••••••'):'—'} description={data.state.debts?
         qty(line(data,'debt').count)+' títulos'+(data.state.debt_as_of?' · posição de '+dateLabel(data.state.debt_as_of):' no período'):'Aguardando títulos'} icon={CircleDollarSign} tone="amber" onClick={()=>inspect('debt')}/>
     </div>
     {reported.count>0&&<Card title="Contratos e valores do PDF com vendedor" description="Quantidade de registros e valor líquido mensal informado pelo IXC">
@@ -50,6 +63,7 @@ export function Portfolio({data,inspect}:{data:DashboardData;inspect:Inspect}) {
       <Card title="Pendências contratuais" description="Contratos ativos com situação pendente">
         <div className="simple-rows">
           <button onClick={()=>inspect('expired')}><FileClock size={17}/><span>Contratos vencidos</span><strong>{qty(line(data,'expired').count)}</strong></button>
+          <button onClick={()=>inspect('renewal_pending')}><FileClock size={17}/><span>Pendentes de renovação</span><strong>{qty(line(data,'renewal_pending').count)}</strong></button>
           <button onClick={()=>inspect('unsigned')}><FileBadge size={17}/><span>Assinatura pendente</span><strong>{data.state.signatures?qty(line(data,'unsigned').count):'—'}</strong></button>
         </div>
         {!data.state.signatures&&<div className="card-foot">Aguardando situação de assinatura no IXC.</div>}

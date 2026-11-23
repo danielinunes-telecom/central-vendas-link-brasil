@@ -148,6 +148,7 @@ button.kpi:hover{border-color:#92b8ff;box-shadow:0 4px 17px #0056fc13}
 .data-table tr:nth-child(even) td{background:#fbfcff}
 .data-table td strong,.table-link{color:#203a65;font-weight:750}
 .data-table td small{display:block;color:#6d7f99;line-height:1.5;margin-top:4px;font-size:10px}
+.annual-card{min-width:0}.annual-table{min-width:2200px}.annual-table textarea{width:210px;min-height:52px;resize:vertical;border:1px solid #dbe4f1;border-radius:6px;padding:7px;font:inherit;color:inherit}.annual-total td{background:#eaf1ff!important;font-weight:750;position:sticky;bottom:0}.annual-table td:first-child,.annual-table th:first-child{position:sticky;left:0;z-index:1;background:#fff}.annual-table th:first-child{background:#eef3fb;z-index:2}
 .table-link{padding:0;background:none;text-align:left}
 .table-link:hover{text-decoration:underline;color:var(--blue)}
 .table-progress{display:flex;align-items:center;gap:8px;white-space:nowrap}
