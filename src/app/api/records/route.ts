@@ -22,7 +22,7 @@ export async function GET(req:Request) {
     const cols=result.rows.map(r=>debt
       ? [r.details.title,debtInstallment(r),r.label,baseNames[r.base_code],dateLabel(r.occurred_on),r.seller,brl(r.amount),r.details.days]
       : [r.label,baseNames[r.base_code],r.seller,dateLabel(r.occurred_on),r.kind==='band'?pct(r.amount):
-        ['target','goal_sale','mrr','opening_mrr','expense','receipt','contract_values','upgrade','downgrade'].includes(r.kind)?brl(r.amount):r.amount,
+        ['target','goal_sale','mrr','opening_mrr','expense','receipt','contract_values','upgrade','downgrade','cancellation_effective','cancellation_reversed'].includes(r.kind)?brl(r.amount):r.amount,
         r.product,r.details.contract,r.details.status||r.details.reason,
         recordIdentifiers(r).map(id=>id.label+' '+id.value).join(' · '),
         ...(contracts ? [r.details.renewal ? dateLabel(String(r.details.renewal)) : '',

@@ -8,7 +8,7 @@ import { brl, dateLabel, pct, qty } from '@/lib/format'
 import { Empty } from './indicators'
 
 export type DetailRequest={kind:string;status?:'all'|'pending'|'visited'}
-const cash=new Set(['target','goal_sale','mrr','opening_mrr','expense','receipt','debt','contract_values','upgrade','downgrade'])
+const cash=new Set(['target','goal_sale','mrr','opening_mrr','expense','receipt','debt','contract_values','upgrade','downgrade','cancellation_effective','cancellation_reversed'])
 const amount=(m:Metric)=>m.kind==='band'?pct(m.amount):cash.has(m.kind)?brl(m.amount):m.kind==='visit_coverage'?(m.amount===1?'Visitado':'Pendente'):qty(m.amount)
 function explanation(m:Metric) {
   const x=m.details

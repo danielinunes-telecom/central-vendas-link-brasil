@@ -108,7 +108,7 @@ begin
               and s.observed_on<=cutoff and (s.scope_start is null or (s.scope_start<=until_day and s.scope_end>=period))),
           'leads',(selected_base='new' or (selected_base='legacy' and not crm_available)) and exists(
             select from source_observations s where s.base_code=selected_base and s.source='leads'
-              and s.observed_on<=cutoff and (s.scope_start is null or (s.scope_start<=until_day and s.scope_end>=period))))
+              and s.observed_on<=cutoff and (s.scope_start is null or (s.scope_start<=until_day and s.scope_end>=period)))))
       on conflict(base_code,month)do update set observed_on=greatest(metric_state.observed_on,excluded.observed_on),
         data=metric_state.data||excluded.data,refreshed_at=now();
     end loop;

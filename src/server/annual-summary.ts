@@ -14,12 +14,23 @@ export async function annualSummary(current:Viewer,params:URLSearchParams):Promi
   const p=input.parse(Object.fromEntries(params)); const seller=current.seller_key||p.seller
   return asUser(current.email,async db=>{
     const sellers=(await db.query<Seller>('select * from comercial.sellers where active order by name')).rows
-    const bases:BaseCode[]=p.base?[p.base as BaseCode]:['old','new','legacy']
-    const metrics=(await db.query<{month:string;kind:string;amount:number|null;count:number;excess:number;category:string|null}>(
+    let bases:BaseCode[]
+    if(p.base){bases=[p.base as BaseCode]}
+    else{
+      const available=(await db.query<{base_code:BaseCode}>(
+        `select distinct base_code from comercial.source_loads where extract(year from observed_on)<=$1`,[p.year])).rows.map(r=>r.base_code)
+      // "legacy" is the import made before Old Base/New Base were separated.  It
+      // must not be added to both current bases or every overlapping row is doubled.
+      bases=available.some(base=>base==='old'||base==='new')
+        ? (['old','new'] as BaseCode[]).filter(base=>available.includes(base))
+        : available.includes('legacy')?['legacy']:['old','new']
+    }
+    const metrics=(await db.query<{month:string;kind:string;amount:number|null;count:number;excess:number|null;category:string|null}>(
       `select to_char(month,'YYYY-MM') month,kind,sum(amount)::float8 amount,count(*)::int count,
-       coalesce(sum((details->>'excess')::numeric) filter(where details?'excess'),0)::float8 excess,
+       sum(case when details->>'excess' ~ '^-?[0-9]+([.][0-9]+)?$' then (details->>'excess')::numeric end)::float8 excess,
        details->>'category' category from comercial.metric_rows
        where extract(year from month)=$1 and base_code=any($2::text[]) and ($3='' or seller_key=$3)
+         and coalesce((details->>'excluded_from_kpi')::boolean,false)=false
        group by month,kind,details->>'category'`,[p.year,bases,seller])).rows
     const states=(await db.query<{month:string;observed_on:string;data:Record<string,unknown>}>(
       `select to_char(month,'YYYY-MM') month,observed_on::text,data from comercial.metric_state
@@ -32,18 +43,22 @@ export async function annualSummary(current:Viewer,params:URLSearchParams):Promi
     const noteBy=new Map(notes.map(n=>[n.month,n.justification]))
     const rows:AnnualSummaryRow[]=Array.from({length:12},(_,i)=>{
       const month=`${p.year}-${String(i+1).padStart(2,'0')}`, list=metrics.filter(m=>m.month===month), state=stateBy.get(month)
-      const sum=(kind:string)=>{const x=list.filter(m=>m.kind===kind);return x.length?x.reduce((a,b)=>a+(b.amount??0),0):null}
+      const sum=(kind:string)=>{const x=list.filter(m=>m.kind===kind&&m.amount!=null);return x.length?x.reduce((a,b)=>a+Number(b.amount),0):null}
       const count=(kind:string)=>{const x=list.filter(m=>m.kind===kind);return x.length?x.reduce((a,b)=>a+b.count,0):null}
       const expenses={fuel:null as number|null,travel:null as number|null,extras:null as number|null}
       for(const e of list.filter(m=>m.kind==='expense')){const k=expenseKind(e.category);expenses[k]=(expenses[k]??0)+(e.amount??0)}
-      const hasExpenses=Boolean(state?.data.expenses); for(const k of Object.keys(expenses) as (keyof typeof expenses)[])if(hasExpenses&&expenses[k]===null)expenses[k]=0
+      const knownCount=(kind:string,stateKey:string)=>count(kind)??(state?.data[stateKey]===true?0:null)
+      const knownSum=(kind:string,stateKey:string)=>sum(kind)??(state?.data[stateKey]===true?0:null)
+      const cancellation=sum('cancellation_effective')
       return {month,label:new Intl.DateTimeFormat('pt-BR',{month:'long',timeZone:'UTC'}).format(new Date(`${month}-01T00:00:00Z`)),positionDate:state?.observed||null,
         portfolio:sum('mrr'),fuel:expenses.fuel,travel:expenses.travel,extras:expenses.extras,
-        excess:hasExpenses?list.filter(m=>m.kind==='expense').reduce((a,b)=>a+b.excess,0):null,target:sum('target'),activations:sum('goal_sale'),
-        upgrades:sum('upgrade'),downgrades:sum('downgrade'),cancellations:sum('cancellation_effective')??sum('cancellation'),reversals:sum('cancellation_reversed')??sum('reversal'),
-        leads:state?.data.leads?count('lead_new'):null,visits:state?.data.visits?count('visit_task'):null,converted:state?.data.leads?count('lead_won'):null,
-        justification:noteBy.get(month)||'',receipts:state?.data.receipts?sum('receipt'):null,debt:state?.data.debts?sum('debt'):null,
-        contractIssues:state?.data.closing?(count('expired')??0)+(count('renewal_pending')??0):null}
+        excess:list.some(m=>m.kind==='expense'&&m.excess!=null)?list.filter(m=>m.kind==='expense').reduce((a,b)=>a+(b.excess??0),0):null,
+        target:sum('target'),activations:sum('goal_sale'),upgrades:sum('upgrade'),downgrades:sum('downgrade'),
+        cancellations:cancellation??sum('cancellation'),reversals:sum('cancellation_reversed')??sum('reversal'),
+        leads:knownCount('lead_new','leads'),visits:knownCount('visit_task','visits'),converted:knownCount('lead_won','leads'),
+        justification:noteBy.get(month)||'',receipts:knownSum('receipt','receipts'),debt:knownSum('debt','debts'),
+        contractIssues:state?.data.closing===true||(count('expired')!=null||count('renewal_pending')!=null)
+          ?(count('expired')??0)+(count('renewal_pending')??0):null}
     })
     return {year:p.year,rows,sellers,seller,canEdit:Boolean(seller)}
   })

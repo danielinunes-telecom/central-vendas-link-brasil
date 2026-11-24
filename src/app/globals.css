@@ -79,10 +79,11 @@ button{border:0}
 .kpi{color:var(--ink);width:100%;min-width:0;min-height:139px;padding:14px 15px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;position:relative;background:var(--paper);border:1px solid var(--edge);border-radius:var(--radius);box-shadow:0 1px 2px #18325308}
 button.kpi:hover{border-color:#92b8ff;box-shadow:0 4px 17px #0056fc13}
 .kpi-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.kpi-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:#eaf2ff;color:#1e65e8}
+.kpi-icon{display:grid;place-items:center;width:30px;height:30px;flex:none;border-radius:8px;background:#eaf2ff;color:#1e65e8}
 .kpi.teal .kpi-icon{background:#e5f6f1;color:#149479}.kpi.violet .kpi-icon{background:#eeecfe;color:#6955ca}.kpi.amber .kpi-icon{background:#fff3df;color:#aa6814}
 .kpi-arrow{color:#9aabbd}.kpi-label{font-size:11.5px;font-weight:690;color:#536781;line-height:1.35}
-.kpi strong{display:block;font-family:"Manrope Variable",sans-serif;font-size:clamp(23px,2.55vw,34px);font-weight:850;letter-spacing:-.054em;line-height:1.2;white-space:nowrap}
+.kpi-value{display:block;max-width:100%;font-family:"Manrope Variable",sans-serif;font-size:clamp(21px,2.2vw,31px);font-weight:850;letter-spacing:-.045em;line-height:1.2;white-space:nowrap}
+.kpi-value.long{font-size:clamp(18px,1.8vw,25px);letter-spacing:-.035em}.kpi-value.very-long{font-size:clamp(15px,1.5vw,21px);letter-spacing:-.025em}
 .kpi-description{font-size:10.5px;color:#64748c;line-height:1.45;margin-top:4px}
 .kpi .status-badge{position:absolute;right:11px;top:48px;font-size:9px;padding:3px 6px;max-width:56%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .content-grid{display:grid;gap:16px;align-items:stretch;min-width:0}

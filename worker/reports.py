@@ -58,7 +58,7 @@ def customer(row):
     return keys(row, customer_key="ID") | labels(
         row, name="RAZAO SOCIAL", document="CNPJ/CPF", trading_name="NOME FANTASIA/SOCIAL", seller="RESPONSAVEL",
         city="CIDADE", branch="FILIAL", address="ENDERECO", address_number="NUMERO", postal="CEP"
-    ) | {"active": norm(row.get("ATIVO")) == "SIM"}
+    ) | {"active": norm(row.get("ATIVO")) in {"SIM", "S", "ATIVO", "TRUE", "1"}}
 
 
 def contract(row):
@@ -191,7 +191,8 @@ def item(row):
 
 
 def cancellation_order(row):
-    original = text(first(row, "DESCRICAO", "MENSAGEM", "OBSERVACAO", "RELATO", "SOLUCAO")) or None
+    original = text(first(row, "DESCRICAO", "DESCRICAO ASSUNTO", "MENSAGEM", "OBSERVACAO", "RELATO", "SOLUCAO")) or None
+    reason = text(first(row, "MOTIVO CANCELAMENTO", "DESCRICAO ASSUNTO")) or None
     subject = text(first(row, "ASSUNTO", "TIPO", "SETOR")) or None
     status = text(first(row, "NOVO STATUS", "STATUS", "STATUS OS", "SITUACAO")) or None
     evidence = norm(" ".join(v for v in (subject, original) if v))
@@ -207,8 +208,8 @@ def cancellation_order(row):
     else:
         classification, matched, review = "pending", None, True
     return keys(row, order_key="ID", contract_key="ID CONTRATO", client_key="ID CLIENTE") | labels(
-        row, client="CLIENTE", reason="MOTIVO CANCELAMENTO"
-    ) | {"attendant": text(first(row,"USUARIO","COLABORADOR")) or None,
+        row, client="CLIENTE"
+    ) | {"reason": reason, "attendant": text(first(row,"USUARIO","COLABORADOR")) or None,
          "opening_responsible": text(row.get("RESPONSAVEL")) or None,
          "opened": day(first(row,"CRIADO EM","DATA ABERTURA","DATA","DATA INICIO")), "closed": day(first(row,"ULTIMA ALTERACAO","DATA FECHAMENTO","DATA FINALIZACAO")),
          "value": decimal(first(row,"VALOR","VALOR CONTRATO"))} | {

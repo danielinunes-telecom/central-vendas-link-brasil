@@ -29,11 +29,12 @@ export function Kpi({label,value,description,icon:Icon,tone='blue',badge,onClick
   label:string;value:string;description:string;icon:LucideIcon;tone?:string;badge?:string;onClick?:()=>void
 }) {
   const Tag=onClick?'button':'div'
+  const valueSize=value.length>17?' very-long':value.length>12?' long':''
   return <Tag className={'kpi '+tone} onClick={onClick}>
-    <div className="kpi-top"><span className="kpi-icon"><Icon size={19}/></span>
-      {onClick&&<ArrowUpRight size={16} className="kpi-arrow"/>}</div>
+    <div className="kpi-top"><span className="kpi-icon"><Icon size={17}/></span>
+      {onClick&&<ArrowUpRight size={14} className="kpi-arrow"/>}</div>
     <span className="kpi-label">{label}</span>
-    <strong>{value}</strong>
+    <strong className={'kpi-value'+valueSize}>{value}</strong>
     <span className="kpi-description">{description}</span>
     {badge&&<span className="status-badge amber">{badge}</span>}
   </Tag>

@@ -36,6 +36,7 @@ async function positions(db:PoolClient, f:Filters) {
   return {states,bases}
 }
 const where = "month=$1::date and base_code=any($6::text[]) and ($2='' or seller_key=$2) " +
+  "and coalesce(details->>'excluded_from_kpi','false')<>'true' " +
   "and ($3='' or branch=$3 or kind in ('target','expense','negotiation')) " +
   "and ($4='' or city=$4 or kind in ('target','expense','negotiation')) " +
   "and ($5='' or product=$5 or kind in ('target','expense','debt','visit_coverage','visit_task','visit_overdue','prospect_visit','lead_new','lead_won','negotiation'))"
@@ -65,18 +66,23 @@ async function aggregate(db: PoolClient, f: Filters, bases:BaseCode[]) {
     "select coalesce(details->>'stage','Sem etapa') name,count(*)::int amount,count(*)::int count" + base +
     " and kind='negotiation' group by details->>'stage' order by amount desc",filters)).rows
   const countBase = (await db.query(
-    "with scoped as (select kind,base_code||':'||row_key row_key,"+identity+" client,details,amount" + base + " and kind in ('opening_contract','active_contract','mrr','opening_mrr')), " +
+    "with scoped as (select kind,base_code||':'||row_key row_key,"+identity+" client,details,amount" + base + " and kind in ('opening_contract','active_contract','opening_active_client','active_client','mrr','opening_mrr')), " +
     "c0 as (select row_key id,client from scoped where kind='opening_contract'), " +
     "c1 as (select row_key id,client from scoped where kind='active_contract'), " +
+    "p0 as (select row_key id from scoped where kind='opening_active_client'), " +
+    "p1 as (select row_key id from scoped where kind='active_client'), " +
     "m as (select coalesce(a.row_key,b.row_key) id,coalesce(a.amount,0) s,coalesce(b.amount,0) e " +
       "from (select * from scoped where kind='opening_mrr') a full join (select * from scoped where kind='mrr') b using(row_key)) " +
     "select (select count(*) from c0)::int c0, (select count(*) from c1)::int c1, " +
     "(select count(*) from c1 where client is null)::int unresolved, " +
-    "(select count(distinct client) from c0)::int p0,(select count(distinct client) from c1)::int p1," +
+    "(case when exists(select from p0) then (select count(*) from p0) else (select count(distinct client) from c0) end)::int p0," +
+    "(case when exists(select from p1) then (select count(*) from p1) else (select count(distinct client) from c1) end)::int p1," +
     "(select count(*) from (select id from c1 except select id from c0) z)::int centry," +
     "(select count(*) from (select id from c0 except select id from c1) z)::int cexit," +
-    "(select count(*) from (select client from c1 where client is not null except select client from c0 where client is not null) z)::int pentry," +
-    "(select count(*) from (select client from c0 where client is not null except select client from c1 where client is not null) z)::int pexit," +
+    "(case when exists(select from p0) and exists(select from p1) then (select count(*) from (select id from p1 except select id from p0) z) " +
+      "else (select count(*) from (select client from c1 where client is not null except select client from c0 where client is not null) z) end)::int pentry," +
+    "(case when exists(select from p0) and exists(select from p1) then (select count(*) from (select id from p0 except select id from p1) z) " +
+      "else (select count(*) from (select client from c0 where client is not null except select client from c1 where client is not null) z) end)::int pexit," +
     "(select sum(amount) from scoped where kind='opening_mrr')::float8 m0," +
     "(select sum(amount) from scoped where kind='mrr')::float8 m1," +
     "(select coalesce(sum(greatest(e-s,0)),0) from m)::float8 mentry," +
@@ -181,7 +187,7 @@ export async function detail(current: Viewer, filters: Filters, params: URLSearc
   }
   return asUser(current.email, async db => {
     const {bases}=await positions(db,filters)
-    const actualKind=kind==='active_client'?'active_contract':kind
+    const actualKind=kind
     const identifierValues=detailIdentifiers.map(([key])=>"details->>'"+key+"'").join(',')
     const searchable="($8='' or position(lower($8) in lower(label)) > 0" +
       " or exists(select from unnest(array["+identifierValues+"]) as id(value) where position(lower($8) in lower(id.value)) > 0)" +
@@ -192,7 +198,7 @@ export async function detail(current: Viewer, filters: Filters, params: URLSearc
       'from comercial.metric_rows m left join comercial.sellers s on s.seller_key=m.seller_key where '+where.replace('seller_key=$2','m.seller_key=$2')
         .replace('base_code=any','m.base_code=any')+' and kind=$7'
     const dedupe=kind==='active_client'||kind==='visit_coverage'||kind==='visit_overdue'||kind==='target'
-    const distinctKey=kind==='target'?'seller_key':identity
+    const distinctKey=kind==='target'?'seller_key':kind==='active_client'?"base_code||':'||row_key":identity
     const eligible=kind==='active_client'?" where details->>'client' is not null":''
     const representative=dedupe
       ? 'select distinct on ('+distinctKey+') * from ('+projection+') r'+eligible+
