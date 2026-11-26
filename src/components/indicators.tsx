@@ -1,9 +1,10 @@
 'use client'
-import { useState, type ReactNode } from 'react'
+import { useContext, useState, type ReactNode } from 'react'
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, BriefcaseBusiness, ChartNoAxesCombined, Clock3, FileSearch, MapPinCheck, RadioTower, ReceiptText, Target, type LucideIcon } from 'lucide-react'
 import { baseNames } from '@/lib/model'
 import type { DashboardData, Goal, Trend } from '@/lib/model'
-import { brl, compactBrl, dateLabel, dayLabel, pct, qty, ratio } from '@/lib/format'
+import { FinancialVisibility, useMoney } from './financial-visibility'
+import { compactBrl, dateLabel, dayLabel, pct, qty, ratio } from '@/lib/format'
 import { Chart, gridLine, labelText, palette, tooltip } from './charts'
 
 export type Inspect = (kind:string,status?:'all'|'pending'|'visited')=>void
@@ -41,22 +42,24 @@ export function Kpi({label,value,description,icon:Icon,tone='blue',badge,onClick
 }
 
 export function OverviewKpis({data:d,inspect}:{data:DashboardData;inspect:Inspect}) {
+  const moneyLabel=useMoney()
   const g=goalTotal(d),expense=line(d,'expense')
   const net=d.base.contracts.start!=null&&d.base.contracts.end!=null?d.base.contracts.end-d.base.contracts.start:null
   return <div className="kpis">
-    <Kpi label="Ativado × meta" value={d.state.goal?pct(ratio(g.actual,g.target)):'—'} description={d.state.goal?brl(g.actual)+' de '+brl(g.target):'Aguardando dados de vendas'} icon={Target}
+    <Kpi label="Ativado × meta" value={d.state.goal?pct(ratio(g.actual,g.target)):'—'} description={d.state.goal?moneyLabel(g.actual)+' de '+moneyLabel(g.target):'Aguardando dados de vendas'} icon={Target}
       badge={g.pending?'Parcial · '+qty(g.pending):undefined} onClick={()=>inspect(g.actual?'goal_sale':'goal_pending')}/>
     <Kpi label="Saldo líquido da base" value={net==null?qty(d.base.contracts.end):(net>0?'+':'')+qty(net)}
       description={net==null?'Contratos ativos · abertura pendente':qty(d.base.contracts.end)+' contratos ativos no período'} icon={BriefcaseBusiness} tone="teal" onClick={()=>inspect('active_contract')}/>
     <Kpi label="Visitas à carteira" value={d.state.visits?pct(ratio(d.coverage.visited,d.coverage.active)):'—'}
       description={d.state.visits?qty(d.coverage.visited)+' atividades para '+qty(d.coverage.active)+' contratos ativos':'Aguardando atividades'} icon={MapPinCheck} tone="violet" onClick={()=>inspect('visit_task')}/>
-    <Kpi label="Despesas em campo" value={d.state.expenses?brl(expense.amount):'—'} description={d.state.expenses?qty(expense.count)+' lançamentos no período':'Aguardando Life Tracker'}
+    <Kpi label="Despesas em campo" value={d.state.expenses?moneyLabel(expense.amount):'—'} description={d.state.expenses?qty(expense.count)+' lançamentos no período':'Aguardando Life Tracker'}
       icon={ReceiptText} tone="amber" onClick={()=>inspect('expense')}/>
   </div>
 }
 
 const shortName=(name:string)=>{const w=name.split(' ');return w.length>2?w[0]+' '+w.at(-1):name}
 export function GoalsChart({goals,onSeller,onDetails}:{goals:Goal[];onSeller:(id:string)=>void;onDetails:()=>void}) {
+  const show=useContext(FinancialVisibility)
   const visible=goals.slice(0,6).reverse()
   const option={
     grid:{left:112,right:24,top:9,bottom:31},
@@ -70,7 +73,7 @@ export function GoalsChart({goals,onSeller,onDetails}:{goals:Goal[];onSeller:(id
   }
   return <Card title="Ativado × meta por vendedor" description="Vendas pela competência de ativação"
     action={<TextAction onClick={onDetails}>Ver análise</TextAction>}>
-    {visible.length?<><div className="chart-legend"><span><i style={{background:'#2164ed'}}/>Realizado validado</span><span><i style={{background:'#e7edfa'}}/>Meta</span></div>
+    {!show?<Empty title="Valores ocultos"/>:visible.length?<><div className="chart-legend"><span><i style={{background:'#2164ed'}}/>Realizado validado</span><span><i style={{background:'#e7edfa'}}/>Meta</span></div>
       <Chart height={226} option={option} label="Gráfico de barras de realizado e meta por vendedor" onClick={e=>{const g=visible[e.dataIndex];if(g)onSeller(g.seller_key)}}/>
       {goals.length>6&&<div className="card-foot">{visible.length} vendedores de {goals.length} · ordenado pelo realizado</div>}</>:
       <Empty title="Aguardando a primeira carga" description="As metas individuais aparecem após a primeira importação." icon={Target}/>}
@@ -102,8 +105,9 @@ export function VisitsCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}
 const baseTypes=[['contracts','Contratos'],['clients','Clientes'],['mrr','Receita recorrente']] as const
 export function BaseCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}) {
   const [mode,setMode]=useState<typeof baseTypes[number][0]>('contracts')
+  const moneyLabel=useMoney(),show=useContext(FinancialVisibility)
   const b=d.base[mode],change=b.start!=null&&b.end!=null?b.end-b.start:null
-  const money=mode==='mrr',format=money?brl:qty
+  const money=mode==='mrr',format=money?moneyLabel:qty
   const option={
     grid:{left:money?88:46,right:22,top:14,bottom:32},
     tooltip:{...tooltip,trigger:'item',formatter:(v:{name:string;value:number})=>v.name+'  '+format(v.value)},
@@ -122,28 +126,29 @@ export function BaseCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}) 
     <div className="base-totals">
       {baseTypes.map(([key,label])=><button key={key} aria-pressed={mode===key} className={mode===key?'selected':''} onClick={()=>setMode(key)}>
         <span>{label==='Receita recorrente'?'Receita recorrente estimada':label+' ativos'}</span>
-        <strong>{key==='mrr'?brl(d.base[key].end):qty(d.base[key].end)}</strong>
+        <strong>{key==='mrr'?moneyLabel(d.base[key].end):qty(d.base[key].end)}</strong>
       </button>)}
     </div>
-    {b.start!=null&&b.end!=null?<Chart height={199} option={option} label={'Gráfico de cascata da base em '+mode}
+    {money&&!show?<Empty title="Valores ocultos"/>:b.start!=null&&b.end!=null?<Chart height={199} option={option} label={'Gráfico de cascata da base em '+mode}
       onClick={e=>inspect(mode==='mrr'?'mrr':(['opening_contract','activation','cancellation','active_contract'][e.dataIndex]||'active_contract'))}/>
       :b.end==null?<Empty title="Aguardando posição da carteira" icon={BriefcaseBusiness}/>
       :<div className="base-missing"><strong>{format(b.end)}</strong><span>Posição da carteira</span><small>Abertura indisponível para esta competência.</small></div>}
     <div className="card-foot">{money?'Valores recorrentes estimados':mode==='clients'?qty(d.base.unresolved)+' contratos sem vínculo de cliente confirmado':
-      d.state.contract_as_of?'Posição de '+dateLabel(d.state.contract_as_of):'Contratos ativos no IXC'}{change!=null&&<span className="foot-emphasis">Saldo {change>0?'+':''}{format(change)}</span>}</div>
+      d.state.contract_as_of?'Posição de '+dateLabel(d.state.contract_as_of):'Contratos ativos no IXC'}{change!=null&&<span className="foot-emphasis">Saldo {change>0&&(!money||show)?'+':''}{format(change)}</span>}</div>
   </Card>
 }
 
 export function ExpensesCard({data:d,inspect}:{data:DashboardData;inspect:Inspect}) {
+  const moneyLabel=useMoney(),show=useContext(FinancialVisibility)
   const summary=line(d,'expense'),cats=d.expenses
   return <Card title="Despesas em campo" description="Distribuição por categoria" action={<TextAction onClick={()=>inspect('expense')}>Ver lançamentos</TextAction>}>
     {cats.length?<div className="expense-breakdown">
       {cats.map((cat,i)=><div className="expense-category" key={cat.name}>
-        <div><span><i className="dot" style={{background:palette[i%palette.length]}}/>{cat.name}</span><strong>{brl(cat.amount)}</strong></div>
-        <div className="micro-track"><span style={{width:Math.max(0,Math.min(100,ratio(cat.amount,summary.amount)||0))+'%',background:palette[i%palette.length]}}/></div>
+        <div><span><i className="dot" style={{background:palette[i%palette.length]}}/>{cat.name}</span><strong>{moneyLabel(cat.amount)}</strong></div>
+        {show&&<div className="micro-track"><span style={{width:Math.max(0,Math.min(100,ratio(cat.amount,summary.amount)||0))+'%',background:palette[i%palette.length]}}/></div>}
       </div>)}
     </div>:<Empty title={d.state.expenses?'Sem despesas no período':'Aguardando despesas'} icon={ReceiptText}/>}
-    {d.state.expenses&&<div className="card-foot"><span>Excedente apurado</span><strong className="foot-emphasis">{brl(summary.excess)}</strong></div>}
+    {d.state.expenses&&<div className="card-foot"><span>Excedente apurado</span><strong className="foot-emphasis">{moneyLabel(summary.excess)}</strong></div>}
   </Card>
 }
 
@@ -164,11 +169,13 @@ export function BandwidthCard({data:d,inspect}:{data:DashboardData;inspect:Inspe
 }
 
 export function SeriesChart({values,label,unit='money'}:{values:Trend[];label:string;unit?:'money'|'percent'}) {
+  const show=useContext(FinancialVisibility),moneyLabel=useMoney()
+  if(unit==='money'&&!show)return <Empty title="Valores ocultos"/>
   if(!values.length) return <Empty title="Sem registros no período" icon={ChartNoAxesCombined}/>
   const form=unit==='money'?compactBrl:pct
   const option={
     grid:{left:65,right:24,top:16,bottom:35},
-    tooltip:{...tooltip,trigger:'axis',valueFormatter:(v:number)=>unit==='money'?brl(v):pct(v)},
+    tooltip:{...tooltip,trigger:'axis',valueFormatter:(v:number)=>unit==='money'?moneyLabel(v):pct(v)},
     xAxis:{type:'category',boundaryGap:false,data:values.map(i=>dayLabel(i.day)),axisTick:{show:false},axisLine:{show:false},axisLabel:labelText},
     yAxis:{type:'value',axisLabel:{...labelText,formatter:form},splitLine:gridLine},
     series:[{type:'line',name:label,data:values.map(i=>i.value),showSymbol:true,symbolSize:7,smooth:0.18,
@@ -178,6 +185,7 @@ export function SeriesChart({values,label,unit='money'}:{values:Trend[];label:st
 }
 
 export function MovementList({data:d,inspect}:{data:DashboardData;inspect:Inspect}) {
+  const moneyLabel=useMoney()
   const movements=[
     ['activation','Ativações',true],['upgrade','Upgrades',true],['downgrade','Downgrades',false],
     ['cancellation','Cancelamentos',false],['reversal','Reversões',true],
@@ -186,7 +194,7 @@ export function MovementList({data:d,inspect}:{data:DashboardData;inspect:Inspec
     <div className="movement-list">{movements.map(([key,label,positive])=><button key={key} onClick={()=>inspect(key)}>
       <span className={'movement-icon '+(positive?'positive':'negative')}>{positive?<ArrowUpRight size={16}/>:<ArrowDownLeft size={16}/>}</span>
       <span>{label}</span><strong>{key==='reversal'&&!d.state.reversal||(['upgrade','downgrade'].includes(key)&&!d.state.changes)?'—':qty(line(d,key).count)}</strong>
-      <small>{key==='reversal'&&!d.state.reversal?'Aguardando configuração':key==='upgrade'||key==='downgrade'?d.state.changes?brl(line(d,key).amount):'Aguardando alterações':'Contratos'}</small>
+      <small>{key==='reversal'&&!d.state.reversal?'Aguardando configuração':key==='upgrade'||key==='downgrade'?d.state.changes?moneyLabel(line(d,key).amount):'Aguardando alterações':'Contratos'}</small>
     </button>)}</div>
   </Card>
 }

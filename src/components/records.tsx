@@ -5,23 +5,25 @@ import type { Filters, Metric } from '@/lib/model'
 import { baseNames, metricNames } from '@/lib/model'
 import { debtInstallment, recordIdentifiers } from '@/lib/record-identifiers'
 import { brl, dateLabel, pct, qty } from '@/lib/format'
+import { useMoney } from './financial-visibility'
 import { Empty } from './indicators'
 
-export type DetailRequest={kind:string;status?:'all'|'pending'|'visited'}
-const cash=new Set(['target','goal_sale','mrr','opening_mrr','expense','receipt','debt','contract_values','upgrade','downgrade','cancellation_effective','cancellation_reversed'])
-const amount=(m:Metric)=>m.kind==='band'?pct(m.amount):cash.has(m.kind)?brl(m.amount):m.kind==='visit_coverage'?(m.amount===1?'Visitado':'Pendente'):qty(m.amount)
-function explanation(m:Metric) {
+export type DetailRequest={kind:string;month?:string;status?:'all'|'pending'|'visited'}
+const cash=new Set(['target','goal_sale','goal_pending','reversal','cancellation_pending','mrr','opening_mrr','expense','receipt','debt','contract_values','upgrade','downgrade','cancellation_effective','cancellation_reversed'])
+const amount=(m:Metric,money:typeof brl)=>m.kind==='band'?pct(m.amount):cash.has(m.kind)?money(m.amount):m.kind==='visit_coverage'?(m.amount===1?'Visitado':'Pendente'):qty(m.amount)
+function explanation(m:Metric,money:typeof brl,visible:boolean) {
   const x=m.details
   if(m.kind==='contract_values') return [x.plan,x.seller_source,x.reason].filter(Boolean).join(' · ')
-  if(m.kind==='goal_sale') return [x.original_description||x.product,x.category,x.rate!=null?pct(Number(x.rate)*100):null,x.gross!=null?'Valor do produto '+brl(Number(x.gross)):null].filter(Boolean).join(' · ')
-  if(m.kind.startsWith('cancellation_')) return [x.subject,x.classification,x.evidence,x.reason,x.original_text].filter(Boolean).join(' · ')
-  if(m.kind==='expense') return [x.category,x.vehicle,x.trip,x.pending_limit?'Diárias ou pessoas pendentes':x.excess!=null?'Excedente '+brl(Number(x.excess)):null].filter(Boolean).join(' · ')
+  if(m.kind==='goal_sale') return [x.original_description||x.product,x.category,x.rate!=null?pct(Number(x.rate)*100):null,x.gross!=null?'Valor do produto '+money(Number(x.gross)):null].filter(Boolean).join(' · ')
+  if(m.kind.startsWith('cancellation_')) return [x.subject,x.classification,visible&&x.evidence,x.reason,visible&&x.original_text].filter(Boolean).join(' · ')
+  if(m.kind==='expense') return [x.category,x.vehicle,x.trip,x.pending_limit?'Diárias ou pessoas pendentes':x.excess!=null?'Excedente '+money(Number(x.excess)):null].filter(Boolean).join(' · ')
   if(m.kind==='band') return qty(Number(x.used))+' / '+qty(Number(x.capacity))+' Mbps'
   if(m.kind==='debt') return qty(Number(x.days))+' dias em atraso'
   return [x.subject,x.stage,x.method,x.reason,x.type,x.access].filter(Boolean).join(' · ')
 }
 type Result={rows:Metric[];total:number;page:number;size:number}
 export function Records({request,filters,onClose,financialVisible}:{request:DetailRequest;filters:Filters;onClose:()=>void;financialVisible:boolean}) {
+  const money=useMoney()
   const [page,setPage]=useState(1),[status,setStatus]=useState(request.status||'all'),[search,setSearch]=useState('')
   const [result,setResult]=useState<Result|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true)
   const [exporting,setExporting]=useState(false)
@@ -75,7 +77,7 @@ export function Records({request,filters,onClose,financialVisible}:{request:Deta
           onChange={e=>{setSearch(e.target.value);setPage(1)}}/></label>
         {kind==='visit_coverage'&&<select aria-label="Situação da visita" value={status} onChange={e=>{setStatus(e.target.value as typeof status);setPage(1)}}>
           <option value="all">Todas as situações</option><option value="visited">Visitados</option><option value="pending">Pendentes</option></select>}
-        <button className="secondary" onClick={exportCsv} disabled={exporting||!result?.total}><Download size={16}/>{exporting?'Exportando…':'Exportar CSV'}</button>
+        <button className="secondary" onClick={exportCsv} title={!financialVisible?'Exiba os valores para exportar o relatório completo':undefined} disabled={!financialVisible||exporting||!result?.total}><Download size={16}/>{exporting?'Exportando…':'Exportar CSV'}</button>
       </div>
       {error&&<div className="notice error" role="alert">{error}</div>}
       {loading&&!result?<div className="records-loading" role="status">Carregando registros…</div>:
@@ -91,15 +93,15 @@ export function Records({request,filters,onClose,financialVisible}:{request:Deta
           <tbody>{result.rows.map(m=><tr key={m.base_code+':'+m.row_key}>
             {titles&&<td><strong>{String(m.details.title??'—')}</strong></td>}
             {debt&&<td>{debtInstallment(m)??'—'}</td>}
-            <td><strong>{m.label}</strong><small>{explanation(m)}</small></td>
+            <td><strong>{m.label}</strong><small>{explanation(m,money,financialVisible)}</small></td>
             <td>{baseNames[m.base_code]}</td>
             {showIds&&!debt&&<td>{recordIdentifiers(m).filter(id=>!titles||id.key!=='title').map(id=>
               <small key={id.key}>{id.label} <strong>{id.value}</strong></small>)}</td>}
             {contracts&&<><td>{dateLabel(typeof (m.details.renewal??m.details.renewal_report)==='string'?String(m.details.renewal??m.details.renewal_report):null)}</td>
-              <td>{brl(typeof m.details.contract_total==='number'?m.details.contract_total:typeof m.details.monthly_report==='number'?m.details.monthly_report:null)}
+              <td>{money(typeof m.details.contract_total==='number'?m.details.contract_total:typeof m.details.monthly_report==='number'?m.details.monthly_report:null)}
                 <small>{m.details.contract_total!=null?'Total dos produtos':m.details.monthly_report!=null?'Líquido mensal':'Sem valor identificado'}</small>
                 {typeof m.details.contract_details_date==='string'&&<small>Relatório de {dateLabel(m.details.contract_details_date)}</small>}</td></>}
-            <td>{m.seller||'Pendente de vínculo'}</td><td>{dateLabel(m.occurred_on)}</td><td>{(!financialVisible&&['mrr','opening_mrr','debt'].includes(m.kind))?'R$ ••••••':amount(m)}</td>
+            <td>{m.seller||'Pendente de vínculo'}</td><td>{dateLabel(m.occurred_on)}</td><td>{amount(m,money)}</td>
           </tr>)}</tbody>
         </table></div>:<Empty title="Nenhum registro encontrado" description="Altere os filtros para consultar outros resultados."/>}
       {!!result?.total&&<div className="records-pagination"><span>Página {result.page} de {Math.ceil(result.total/result.size)}</span>

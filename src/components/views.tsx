@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { Banknote, BriefcaseBusiness, CircleCheck, CircleDollarSign, FileBadge, FileClock, MapPinCheck, ReceiptText, Target, TrendingUp, Users } from 'lucide-react'
 import type { DashboardData, Goal } from '@/lib/model'
-import { brl, dateLabel, pct, qty, ratio } from '@/lib/format'
+import { useMoney } from './financial-visibility'
+import { dateLabel, pct, qty, ratio } from '@/lib/format'
 import { BandwidthCard, BaseCard, Card, Empty, ExpensesCard, GoalsChart, goalTotal, Kpi, line, MovementList, OverviewKpis, SeriesChart, TextAction, VisitsCard, type Inspect } from './indicators'
 
 export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;inspect:Inspect;onSeller:(id:string)=>void;onSales:()=>void}) {
@@ -33,6 +34,7 @@ export function Overview({data,inspect,onSeller,onSales}:{data:DashboardData;ins
 }
 
 export function Portfolio({data,inspect,financialVisible}:{data:DashboardData;inspect:Inspect;financialVisible:boolean}) {
+  const money=useMoney()
   const [tab,setTab]=useState<'base'|'finance'|'band'>('base')
   const {base}=data
   const reported=line(data,'contract_values')
@@ -40,14 +42,14 @@ export function Portfolio({data,inspect,financialVisible}:{data:DashboardData;in
     <div className="kpis">
       <Kpi label="Clientes ativos" value={qty(base.clients.end)} description={qty(base.unresolved)+' contratos com vínculo pendente'} icon={Users} onClick={()=>inspect('active_client')}/>
       <Kpi label="Contratos ativos" value={qty(base.contracts.end)} description="Inclui bloqueados e suspensos ativos" icon={BriefcaseBusiness} tone="teal" onClick={()=>inspect('active_contract')}/>
-      <Kpi label="Receita mensal recorrente" value={financialVisible?brl(base.mrr.end):'R$ ••••••'} description={qty(line(data,'mrr').count)+' de '+qty(base.contracts.end)+' contratos · estimativa'} icon={Banknote} tone="violet" onClick={()=>inspect('mrr')}/>
-      <Kpi label="Inadimplência de 60 dias" value={data.state.debts?(financialVisible?brl(line(data,'debt').amount):'R$ ••••••'):'—'} description={data.state.debts?
+      <Kpi label="Receita mensal recorrente" value={money(base.mrr.end)} description={qty(line(data,'mrr').count)+' de '+qty(base.contracts.end)+' contratos · estimativa'} icon={Banknote} tone="violet" onClick={()=>inspect('mrr')}/>
+      <Kpi label="Inadimplência de 60 dias" value={data.state.debts?money(line(data,'debt').amount):'—'} description={data.state.debts?
         qty(line(data,'debt').count)+' títulos'+(data.state.debt_as_of?' · posição de '+dateLabel(data.state.debt_as_of):' no período'):'Aguardando títulos'} icon={CircleDollarSign} tone="amber" onClick={()=>inspect('debt')}/>
     </div>
     {reported.count>0&&<Card title="Contratos e valores do PDF com vendedor" description="Quantidade de registros e valor líquido mensal informado pelo IXC">
       <div className="simple-rows">
         <button onClick={()=>inspect('contract_values')}><BriefcaseBusiness size={17}/><span>Contratos no relatório</span><strong>{qty(reported.count)}</strong></button>
-        <button onClick={()=>inspect('contract_values')}><Banknote size={17}/><span>Valor líquido mensal do relatório</span><strong>{brl(reported.amount)}</strong></button>
+        <button onClick={()=>inspect('contract_values')}><Banknote size={17}/><span>Valor líquido mensal do relatório</span><strong>{money(reported.amount)}</strong></button>
       </div>
       <div className="card-foot">O detalhamento sinaliza os registros cujo ID do contrato ainda precisa ser confirmado.</div>
     </Card>}
@@ -57,7 +59,7 @@ export function Portfolio({data,inspect,financialVisible}:{data:DashboardData;in
     {tab==='base'&&<div className="content-grid main-grid"><BaseCard data={data} inspect={inspect}/><MovementList data={data} inspect={inspect}/></div>}
     {tab==='finance'&&<div className="content-grid equal-grid">
       <Card title="Recebimentos da carteira" description="Apuração pela data do pagamento">
-        <div className="finance-value"><strong>{data.state.receipts?brl(line(data,'receipt').amount):'—'}</strong><span>{qty(line(data,'receipt').count)} títulos com pagamento identificado</span></div>
+        <div className="finance-value"><strong>{data.state.receipts?money(line(data,'receipt').amount):'—'}</strong><span>{qty(line(data,'receipt').count)} títulos com pagamento identificado</span></div>
         <div className="card-foot"><TextAction onClick={()=>inspect('receipt')}>Ver recebimentos</TextAction></div>
       </Card>
       <Card title="Pendências contratuais" description="Contratos ativos com situação pendente">
@@ -74,6 +76,7 @@ export function Portfolio({data,inspect,financialVisible}:{data:DashboardData;in
 }
 
 export function Sales({data,inspect,onSeller}:{data:DashboardData;inspect:Inspect;onSeller:(id:string)=>void}) {
+  const money=useMoney()
   const goals=goalTotal(data)
   let cumulative=0
   const series=data.daily.map(row=>({day:row.day,value:cumulative+=row.value}))
@@ -81,8 +84,8 @@ export function Sales({data,inspect,onSeller}:{data:DashboardData;inspect:Inspec
   const displayed=data.goals.slice().sort((a,b)=>sort==='name'?a.name.localeCompare(b.name,'pt-BR'):b[sort]-a[sort])
   return <>
     <div className="kpis three">
-      <Kpi label="Meta da competência" value={brl(goals.target)} description={qty(data.goals.length)+' vendedores'} icon={Target} onClick={()=>inspect('target')}/>
-      <Kpi label="Realizado validado" value={data.state.goal?brl(goals.actual):'—'} description={(data.state.goal?pct(ratio(goals.actual,goals.target))+' de atingimento':'Aguardando dados de vendas')} icon={TrendingUp} tone="teal" onClick={()=>inspect('goal_sale')}/>
+      <Kpi label="Meta da competência" value={money(goals.target)} description={qty(data.goals.length)+' vendedores'} icon={Target} onClick={()=>inspect('target')}/>
+      <Kpi label="Realizado validado" value={data.state.goal?money(goals.actual):'—'} description={(data.state.goal?pct(ratio(goals.actual,goals.target))+' de atingimento':'Aguardando dados de vendas')} icon={TrendingUp} tone="teal" onClick={()=>inspect('goal_sale')}/>
       <Kpi label="Ativações pendentes" value={qty(goals.pending)} description="Produto, valor ou vendedor a confirmar" icon={FileClock} tone="amber" onClick={()=>inspect('goal_pending')}/>
     </div>
     <div className="content-grid equal-grid">
@@ -94,7 +97,7 @@ export function Sales({data,inspect,onSeller}:{data:DashboardData;inspect:Inspec
         <thead><tr><th><button onClick={()=>setSort('name')}>Vendedor</button></th><th>Equipe</th><th><button onClick={()=>setSort('target')}>Meta</button></th>
           <th><button onClick={()=>setSort('actual')}>Realizado</button></th><th>Atingimento</th><th>Pendentes</th></tr></thead>
         <tbody>{displayed.map((g:Goal)=><tr key={g.seller_key}><td><button className="table-link" onClick={()=>onSeller(g.seller_key)}>{g.name}</button></td>
-          <td>{g.team}</td><td>{brl(g.target)}</td><td>{brl(g.actual)}</td>
+          <td>{g.team}</td><td>{money(g.target)}</td><td>{money(g.actual)}</td>
           <td><div className="table-progress"><span>{pct(ratio(g.actual,g.target))}</span><div className="micro-track"><i style={{width:Math.min(100,ratio(g.actual,g.target)||0)+'%'}}/></div></div></td>
           <td>{g.pending?<button className="status-badge amber" onClick={()=>inspect('goal_pending')}>{qty(g.pending)}</button>:'—'}</td></tr>)}</tbody>
       </table></div>
@@ -131,20 +134,21 @@ export function Crm({data,inspect}:{data:DashboardData;inspect:Inspect}) {
 }
 
 export function Expenses({data,inspect}:{data:DashboardData;inspect:Inspect}) {
+  const money=useMoney()
   const total=line(data,'expense')
   return <>
     <div className="kpis three">
-      <Kpi label="Total em campo" value={data.state.expenses?brl(total.amount):'—'} description={qty(total.count)+' lançamentos'} icon={ReceiptText} onClick={()=>inspect('expense')}/>
-      <Kpi label="Excedente apurado" value={data.state.expenses?brl(total.excess):'—'} description="Conforme os limites configurados" icon={CircleDollarSign} tone="teal" onClick={()=>inspect('expense')}/>
+      <Kpi label="Total em campo" value={data.state.expenses?money(total.amount):'—'} description={qty(total.count)+' lançamentos'} icon={ReceiptText} onClick={()=>inspect('expense')}/>
+      <Kpi label="Excedente apurado" value={data.state.expenses?money(total.excess):'—'} description="Conforme os limites configurados" icon={CircleDollarSign} tone="teal" onClick={()=>inspect('expense')}/>
       <Kpi label="Hospedagem a validar" value={data.state.expenses?qty(total.missing):'—'} description="Quantidade de pessoas ou diárias pendente" icon={FileClock} tone="amber" onClick={()=>inspect('expense')}/>
     </div>
     <div className="content-grid equal-grid">
       <ExpensesCard data={data} inspect={inspect}/>
       <Card title="Limites de viagem" description="Valores por lançamento elegível">
         <div className="simple-rows">
-          <div><ReceiptText size={17}/><span>Almoço</span><strong>{brl(data.state.meal??40)} / refeição</strong></div>
-          <div><ReceiptText size={17}/><span>Jantar</span><strong>{brl(data.state.meal??40)} / refeição</strong></div>
-          <div><ReceiptText size={17}/><span>Hospedagem</span><strong>{brl(data.state.lodging??180)} / pessoa por diária</strong></div>
+          <div><ReceiptText size={17}/><span>Almoço</span><strong>{money(data.state.meal??40)} / refeição</strong></div>
+          <div><ReceiptText size={17}/><span>Jantar</span><strong>{money(data.state.meal??40)} / refeição</strong></div>
+          <div><ReceiptText size={17}/><span>Hospedagem</span><strong>{money(data.state.lodging??180)} / pessoa por diária</strong></div>
         </div>
       </Card>
     </div>

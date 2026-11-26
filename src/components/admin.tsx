@@ -1,7 +1,8 @@
 'use client'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowRight, CircleCheck, ClipboardList, Database, FileSpreadsheet, History, LoaderCircle, Plus, Settings2, UploadCloud, Wrench } from 'lucide-react'
-import { brl, dateLabel, pct, qty } from '@/lib/format'
+import { FinancialVisibility, useMoney } from './financial-visibility'
+import { dateLabel, pct, qty } from '@/lib/format'
 import { baseNames, roles, sourceNames, type AdminData, type CorrectionIssue, type ImportBatch, type Role, type SourceStatus } from '@/lib/model'
 import { Card, Empty } from './indicators'
 
@@ -21,11 +22,12 @@ export function Administration({today,onUpdated}:{today:string;onUpdated:()=>voi
 }
 
 function CorrectionsPanel({onUpdated}:{onUpdated:()=>void}){
+  const show=useContext(FinancialVisibility)
   const [data,setData]=useState<AdminData|null>(null),[selected,setSelected]=useState<CorrectionIssue|null>(null)
   const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const read=useCallback(async()=>{const r=await fetch('/api/admin/corrections',{cache:'no-store'});const b=await r.json();if(!r.ok)throw new Error(b.error);setData(b)},[])
   useEffect(()=>{read().catch(e=>setError(e.message))},[read])
-  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;setBusy(true);setError('');setMessage('')
+  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!selected)return;if(!show&&selected.kind==='goal'){setError('Exiba os valores para salvar a correção.');return}setBusy(true);setError('');setMessage('')
     const f=new FormData(e.currentTarget),value=selected.kind==='goal'?{seller:String(f.get('seller')),product:String(f.get('product')),total:Number(f.get('total')),note:String(f.get('note'))}
       :selected.kind==='contract_link'?{client:String(f.get('client')),note:String(f.get('note'))}
       :{classification:String(f.get('classification')),contract:String(f.get('contract')),note:String(f.get('note'))}
@@ -41,7 +43,7 @@ function CorrectionsPanel({onUpdated}:{onUpdated:()=>void}){
       :<Empty title="Nenhuma correção pendente" description="As importações disponíveis foram validadas automaticamente." icon={CircleCheck}/>}</Card>
     {selected&&<Card title={'Corrigir · '+selected.label} description={selected.reason}><form className="settings-form" onSubmit={save}>
       {selected.kind==='goal'&&<><label>Vendedor<select name="seller" required>{data.sellers.map(s=><option key={s.seller_key} value={s.seller_key}>{s.name}</option>)}</select></label>
-        <div className="form-pair"><label>Descrição do produto<input name="product" defaultValue={String(selected.details.original_description||'')} required/></label><label>Valor total do contrato<input name="total" type="number" min="0" step="0.01" defaultValue={String(selected.details.contract_total||'')} required/></label></div></>}
+        <div className="form-pair"><label>Descrição do produto<input name="product" defaultValue={String(selected.details.original_description||'')} required/></label><label>Valor total do contrato<input name="total" type={show?'number':'password'} readOnly={!show} title={!show?'Exiba os valores para editar':undefined} min="0" step="0.01" defaultValue={String(selected.details.contract_total||'')} required/></label></div></>}
       {selected.kind==='contract_link'&&<label>ID do cliente correto<input name="client" required/></label>}
       {selected.kind==='cancellation'&&<><label>ID do contrato correto<input name="contract" defaultValue={String(selected.details.contract||'')} placeholder="Obrigatório quando houver mais de um contrato"/></label><label>Classificação<select name="classification"><option value="request">Somente solicitação</option><option value="effective">Cancelamento efetivado</option><option value="reversed">Reversão confirmada</option><option value="pending">Manter pendente</option></select></label></>}
       <label>Justificativa da correção<input name="note" minLength={4} required/></label><div className="form-pair"><button type="submit" className="primary" disabled={busy}>Salvar e recalcular</button><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button></div>
@@ -166,6 +168,7 @@ function mapValue(v:FormDataEntryValue|null) {
 type Save=(e:FormEvent<HTMLFormElement>,key:string,transform:(f:FormData)=>unknown)=>void
 
 function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
+  const show=useContext(FinancialVisibility),money=useMoney()
   const [data,setData]=useState<AdminData|null>(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const [accountRole,setAccountRole]=useState<Role>('seller'),[items,setItems]=useState(1)
   const read=useCallback(async()=>{
@@ -177,6 +180,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
   useEffect(()=>{read().catch(e=>setError(e.message))},[read])
   const save:Save=async(e,key,transform)=>{
     e.preventDefault()
+    if(!show&&e.currentTarget.querySelector('input[readonly][type=password]')){setError('Exiba os valores para salvar esta configuração.');return}
     setBusy(true);setMessage('');setError('')
     try {
       const value=transform(new FormData(e.currentTarget))
@@ -199,7 +203,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
       <Card title="Metas por vendedor" description="As alterações valem a partir da competência selecionada.">
         <form className="settings-form" onSubmit={e=>save(e,'target',f=>({seller:f.get('seller'),month:String(f.get('month'))+'-01',amount:Number(f.get('amount'))}))}>
           <label>Vendedor<select name="seller" required>{sellers}</select></label><div className="form-pair"><label>Competência<input type="month" name="month" min="2026-01" defaultValue={month} required/></label>
-          <label>Meta em reais<input name="amount" type="number" min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
+          <label>Meta em reais<input name="amount" type={show?'number':'password'} readOnly={!show} title={!show?'Exiba os valores para editar':undefined} min="0" step="0.01" defaultValue="7000" required/></label></div>{saveBtn('Salvar meta')}
         </form>
       </Card>
       <Card title="Cálculo das vendas" description="Baseado no contrato mais recente do cliente.">
@@ -209,8 +213,8 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     <div className="content-grid equal-grid">
       <Card title="Cálculo das visitas" description="Todas as atividades são consideradas."><div className="import-body"><p>Meta mensal: um registro por contrato ativo do vendedor. Realizado: quantidade de atividades registradas, independentemente do assunto ou status.</p></div></Card>
       <Card title="Limites de despesas"><form className="settings-form" onSubmit={e=>save(e,'expense_limits',f=>({meal:Number(f.get('meal')),lodging:Number(f.get('lodging'))}))}>
-        <label>Almoço e jantar por refeição<input name="meal" type="number" min="0" step="0.01" defaultValue={limits?.meal} required/></label>
-        <label>Hospedagem por pessoa e diária<input name="lodging" type="number" min="0" step="0.01" defaultValue={limits?.lodging} required/></label>{saveBtn()}
+        <label>Almoço e jantar por refeição<input name="meal" type={show?'number':'password'} readOnly={!show} title={!show?'Exiba os valores para editar':undefined} min="0" step="0.01" defaultValue={limits?.meal} required/></label>
+        <label>Hospedagem por pessoa e diária<input name="lodging" type={show?'number':'password'} readOnly={!show} title={!show?'Exiba os valores para editar':undefined} min="0" step="0.01" defaultValue={limits?.lodging} required/></label>{saveBtn()}
       </form></Card>
       <Card title="Reversões no IXC"><form className="settings-form" onSubmit={e=>save(e,'reversal_types',f=>split(f.get('types')))}>
         <label>Tipos de alteração separados por vírgula<input name="types" defaultValue={strings(data.rules.reversal_types)} placeholder="Aguardando identificação no IXC"/></label>{saveBtn()}
@@ -226,7 +230,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
           <label>Base do contrato<select name="contractBase" defaultValue="new">{Object.entries(baseNames).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></label>
           <div className="form-pair"><label>ID do contrato<input name="contract" required/></label><label>Vendedor da venda<select name="seller">{sellers}</select></label></div>
           {Array.from({length:items},(_,i)=><div key={i} className="form-pair"><label>Produto {i+1}<select name={'product'+i}>{products.map(p=><option key={p}>{p}</option>)}</select></label>
-            <label>Valor do item<input name={'total'+i} type="number" min="0" step="0.01" required/></label></div>)}
+            <label>Valor do item<input name={'total'+i} type={show?'number':'password'} readOnly={!show} title={!show?'Exiba os valores para editar':undefined} min="0" step="0.01" required/></label></div>)}
           <button type="button" className="secondary" onClick={()=>setItems(n=>Math.min(n+1,10))}><Plus size={16}/>Adicionar item</button>
           <label>Referência da conferência<input name="note" minLength={4} required/></label>{saveBtn('Salvar conferência')}
         </form>
@@ -254,7 +258,7 @@ function SettingsPanel({today,onUpdated}:{today:string;onUpdated:()=>void}) {
     </Card>
     <div className="content-grid equal-grid">
 
-      <Card title="Metas cadastradas"><div className="simple-rows settings-target-list">{data.targets.filter(r=>r.effective_month<=today).filter((r,i,a)=>a.findIndex(v=>v.seller_key===r.seller_key)===i).map(r=><div key={r.seller_key}><span>{r.name}</span><strong>{brl(Number(r.amount))}</strong></div>)}</div></Card>
+      <Card title="Metas cadastradas"><div className="simple-rows settings-target-list">{data.targets.filter(r=>r.effective_month<=today).filter((r,i,a)=>a.findIndex(v=>v.seller_key===r.seller_key)===i).map(r=><div key={r.seller_key}><span>{r.name}</span><strong>{money(Number(r.amount))}</strong></div>)}</div></Card>
     </div>
   </div>
 }

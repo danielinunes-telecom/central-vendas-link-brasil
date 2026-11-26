@@ -55,7 +55,7 @@ async function aggregate(db: PoolClient, f: Filters, bases:BaseCode[]) {
     "with m as (select kind,seller_key,amount,label,details" + base + " and kind in ('target','goal_sale','goal_pending')) " +
     "select t.seller_key,t.label name,t.details->>'team' team,t.amount::float8 target, " +
     "coalesce(sum(m.amount) filter(where m.kind='goal_sale'),0)::float8 actual, " +
-    "count(*) filter(where m.kind='goal_pending')::int pending from m t left join m on m.seller_key=t.seller_key and m.kind<>'target' " +
+    "count(*) filter(where m.kind='goal_pending')::int pending from (select distinct on (seller_key) * from m where kind='target' order by seller_key,amount desc) t left join m on m.seller_key=t.seller_key and m.kind<>'target' " +
     "where t.kind='target' group by t.seller_key,t.label,t.details,t.amount order by actual desc,t.label",filters)).rows
   const daily = (await db.query<Trend>(
     "select occurred_on::text as day,sum(amount)::float8 value" + base + " and kind='goal_sale' group by occurred_on order by occurred_on",filters)).rows
@@ -122,6 +122,12 @@ async function dashboardMonthly(current: Viewer, filters: Filters): Promise<Dash
       "array_agg(distinct product order by product) filter(where product is not null) products " +
       "from comercial.metric_rows where month=$1::date and ($2='' or seller_key=$2) and base_code=any($3::text[])",[filters.month+'-01',filters.seller,bases])).rows[0]
     const a = await aggregate(db,filters,bases)
+    const observedKinds=new Set(a.summary.map(row=>row.kind))
+    for(const [flag,kinds] of [
+      ['changes',['upgrade','downgrade']],['receipts',['receipt']],['expenses',['expense']],
+      ['goal',['goal_sale','goal_pending']],['band',['band']],['leads',['lead_new','lead_won']],
+      ['visits',['visit_task']],['reversal',['reversal','cancellation_reversed']]
+    ] as const)state[flag]=Boolean(state[flag]||kinds.some(kind=>observedKinds.has(kind)))
     const c=a.countBase
     const visit = a.summary.find(l=>l.kind==='visit_task')
     const activeContracts=a.summary.find(l=>l.kind==='active_contract')?.count??0
@@ -151,12 +157,13 @@ export async function dashboard(current:Viewer,filters:Filters):Promise<Dashboar
   const months=periodMonths(filters)
   if(months.length===1)return dashboardMonthly(current,{...filters,period:'monthly'})
   const all=await Promise.all(months.map(month=>dashboardMonthly(current,{...filters,month,period:'monthly'})))
-  const last=all.at(-1)!, first=all[0]
+  const end=all.filter(d=>d.observed).at(-1)??all.at(-1)!
+  const last={...end}, first=all[0]
   const positional=new Set(['active_contract','active_client','mrr','debt','expired','renewal_pending','unsigned','visit_coverage','visit_overdue','contract_values'])
   const lineKinds=new Set(all.flatMap(d=>d.lines.map(l=>l.kind)))
   last.lines=Array.from(lineKinds,k=>{
     const values=all.map(d=>d.lines.find(l=>l.kind===k)).filter(Boolean) as Line[]
-    if(positional.has(k))return values.at(-1)??{kind:k,count:0,amount:0,coverage:0,excess:0,missing:0}
+    if(positional.has(k))return end.lines.find(l=>l.kind===k)??{kind:k,count:0,amount:0,coverage:0,excess:0,missing:0}
     return values.reduce<Line>((out,v)=>({kind:k,count:out.count+v.count,amount:out.amount+v.amount,coverage:out.coverage+v.coverage,excess:out.excess+v.excess,missing:out.missing+v.missing}),{kind:k,count:0,amount:0,coverage:0,excess:0,missing:0})
   })
   const goals=new Map<string,Goal>()
@@ -168,7 +175,18 @@ export async function dashboard(current:Viewer,filters:Filters):Promise<Dashboar
   last.base={clients:{start:first.base.clients.start,end:last.base.clients.end,entries:all.reduce((n,d)=>n+(d.base.clients.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.clients.exits||0),0)},
     contracts:{start:first.base.contracts.start,end:last.base.contracts.end,entries:all.reduce((n,d)=>n+(d.base.contracts.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.contracts.exits||0),0)},
     mrr:{start:first.base.mrr.start,end:last.base.mrr.end,entries:all.reduce((n,d)=>n+(d.base.mrr.entries||0),0),exits:all.reduce((n,d)=>n+(d.base.mrr.exits||0),0)},unresolved:last.base.unresolved}
-  last.filters=filters;last.observed=last.observed;last.state={...first.state,...last.state}
+  last.filters=filters
+  last.state={...end.state}
+  for(const key of ['visits','expenses','receipts','leads','changes','reversal','band','goal'] as const)
+    last.state[key]=all.some(d=>d.state[key])
+  const active=all.reduce((n,d)=>n+d.coverage.active,0),visited=all.reduce((n,d)=>n+d.coverage.visited,0)
+  last.coverage={active,visited,pending:all.reduce((n,d)=>n+d.coverage.pending,0),older:end.coverage.older}
+  const circuits=new Map<string,Usage>()
+  for(const d of all)for(const row of d.bandwidth.circuits){
+    const key=row.base_code+':'+row.circuit,prev=circuits.get(key)
+    circuits.set(key,{...row,peak:Math.max(prev?.peak??row.peak,row.peak)})
+  }
+  last.bandwidth={trend:all.flatMap(d=>d.bandwidth.trend),circuits:[...circuits.values()].sort((a,b)=>b.peak-a.peak)}
   return last
 }
 type DetailResult={rows:Metric[];total:number;page:number;size:number}

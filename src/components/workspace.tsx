@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Activity, BriefcaseBusiness, CalendarDays, ChevronDown, CircleUserRound, Eye, EyeOff, Filter, LayoutDashboard, LogOut, MapPinned, Menu, ReceiptText, RefreshCw, Settings2, TableProperties, Target, X, type LucideIcon } from 'lucide-react'
 import { baseNames, earliestMonth, roles, sections, type DashboardData, type Filters, type Section } from '@/lib/model'
 import { dateLabel, monthLabel } from '@/lib/format'
+import { FinancialVisibility } from './financial-visibility'
 import { Administration } from './admin'
 import { Records, type DetailRequest } from './records'
 import { Crm, Expenses, Overview, Portfolio, Sales } from './views'
@@ -64,7 +65,7 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
   },[filters,initial.filters,revision])
   function navigate(next:Section){setView(next);setDrawer(false);setRequest(null)}
   function choose(key:keyof Filters,value:string){setFilters(old=>({...old,[key]:value}))}
-  function inspect(kind:string,status?:DetailRequest['status']){if(!loading)setRequest({kind,status})}
+  function inspect(kind:string,status?:DetailRequest['status'],month?:string){if(!loading)setRequest({kind,status,month})}
   function sellerFilter(id:string){if(showSeller)choose('seller',filters.seller===id?'':id)}
   async function logout(){
     try{const r=await fetch('/api/auth/logout',{method:'POST'});if(r.ok)location.href='/';else setError('Falha ao sair da conta.')}
@@ -73,7 +74,7 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
   const [heading,subheading]=headings[view]
   const extras=Number(!!filters.city)+Number(!!filters.branch)+Number(!!filters.product)
   const allowPortfolioFilters=view==='portfolio'||view==='sales'||view==='crm'
-  return <div className="app-layout">
+  return <FinancialVisibility.Provider value={financialVisible}><div className="app-layout">
     <a href="#main" className="skip-link">Ir para o conteúdo</a>
     {drawer&&<button className="mobile-overlay" aria-label="Fechar navegação" onClick={()=>setDrawer(false)}/>}
     <aside className={'sidebar '+(drawer?'sidebar-open':'')}>
@@ -104,7 +105,7 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
         </div>
       </header>
       <div className="main-content">
-        <div className="page-title"><div><h1>{heading}</h1><p>{subheading}</p></div></div>
+        <div className="page-title">{view==='admin'&&<button className="secondary" onClick={toggleFinancial}>{financialVisible?'Ocultar valores':'Exibir valores'}</button>}<div><h1>{heading}</h1><p>{subheading}</p></div></div>
         {view!=='admin'&&<div className="filter-bar" aria-label="Filtros do painel">
           <label className="filter-control"><span>Período</span><select aria-label="Tipo de período" value={filters.period} onChange={e=>choose('period',e.target.value)}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="semiannual">Semestral</option></select></label>
           <label className="filter-control"><CalendarDays size={15}/><span>Competência</span>
@@ -143,13 +144,13 @@ export function Workspace({initial,section}:{initial:DashboardData;section:strin
           {view==='sales'&&<Sales data={data} inspect={inspect} onSeller={sellerFilter}/>}
           {view==='crm'&&<Crm data={data} inspect={inspect}/>}
           {view==='expenses'&&<Expenses data={data} inspect={inspect}/>}
-          {view==='annual'&&<AnnualSummary dashboard={data} inspect={inspect} financialVisible={financialVisible}/>}
+          {view==='annual'&&<AnnualSummary key={revision} dashboard={data} inspect={(kind,month)=>inspect(kind,undefined,month)}/>}
           {view==='admin'&&admin&&<Administration today={today} onUpdated={update}/>}
         </div>
         <footer className="workspace-footer"><Activity size={14}/><span>Link Brasil · Central de Vendas</span>{data.demo&&<span>Dados fictícios</span>}</footer>
       </div>
     </main>
-    {request&&<Records request={request} filters={filters} financialVisible={financialVisible} onClose={()=>setRequest(null)}/>}
-  </div>
+    {request&&<Records request={request} filters={request.month?{...filters,month:request.month,period:'monthly',city:'',branch:'',product:''}:filters} financialVisible={financialVisible} onClose={()=>setRequest(null)}/>}
+  </div></FinancialVisibility.Provider>
 }
 
